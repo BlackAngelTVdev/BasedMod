@@ -2,6 +2,8 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using Mirror;
+using UnityEngine;
 
 namespace MonSupermarketMod
 {
@@ -11,13 +13,11 @@ namespace MonSupermarketMod
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "Mon Super Mod";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
-        internal static ConfigEntry<bool> EnablePlayerTweaks;
-        internal static ConfigEntry<float> SpeedMultiplier;
-        internal static ConfigEntry<float> JumpMultiplier;
+        internal static ConfigEntry<bool> EnableTobacco;
 
         private Harmony _harmony;
 
@@ -31,32 +31,39 @@ namespace MonSupermarketMod
                 1f,
                 "Multiplicateur appliqué aux fonds modifiés via GameData.CmdAlterFunds. 1 = comportement vanilla.");
 
-            EnablePlayerTweaks = Config.Bind(
-                "Joueur",
-                "ActiverModifications",
+            EnableTobacco = Config.Bind(
+                "Tabac",
+                "ActiverRayonTabac",
                 true,
-                "Active ou désactive les multiplicateurs de vitesse et de saut.");
-
-            SpeedMultiplier = Config.Bind(
-                "Joueur",
-                "MultiplicateurVitesse",
-                2f,
-                new ConfigDescription(
-                    "Multiplicateur de vitesse (marche, sprint, accroupi). 1 = comportement vanilla.",
-                    new AcceptableValueRange<float>(0.1f, 10f)));
-
-            JumpMultiplier = Config.Bind(
-                "Joueur",
-                "MultiplicateurSaut",
-                1.8f,
-                new ConfigDescription(
-                    "Multiplicateur de hauteur de saut. 1 = comportement vanilla.",
-                    new AcceptableValueRange<float>(0.1f, 10f)));
+                "Ajoute le rayon Tabac (cigarettes, cigarillos, tabac à rouler) et son palier dans l'arbre de compétences.");
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
 
             Log.LogInfo($"{PluginName} v{PluginVersion} chargé.");
+        }
+
+        private void Update()
+        {
+            if (!Input.GetKeyDown(KeyCode.F5))
+                return;
+
+            if (!NetworkServer.active)
+            {
+                Log.LogWarning("[Fonds] F5 : seul l'hôte peut ajouter des points de franchise.");
+                return;
+            }
+
+            GameData data = GameData.Instance;
+            if (data == null)
+            {
+                Log.LogWarning("[Fonds] F5 : GameData n'est pas encore disponible.");
+                return;
+            }
+
+            data.NetworkgameFranchisePoints =
+                Mathf.Clamp(data.gameFranchisePoints + 50, 0, 100000);
+            Log.LogInfo("[Fonds] 50 points de franchise ajoutés.");
         }
 
         private void OnDestroy()

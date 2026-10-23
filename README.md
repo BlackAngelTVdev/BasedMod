@@ -5,7 +5,7 @@
 ![Forks](https://img.shields.io/github/forks/BlackAngelTVdev/BasedMod?style=for-the-badge&color=808080)
 ![Last Commit](https://img.shields.io/github/last-commit/BlackAngelTVdev/BasedMod?style=for-the-badge&color=blue)
 
-> **Un mod BepInEx 5 pour Supermarket Together qui ajuste les fonds, la vitesse de déplacement et la hauteur de saut.**
+> **Un mod BepInEx 5 pour Supermarket Together qui ajoute un rayon tabac et son palier dans l'arbre de compétences.**
 
 ---
 
@@ -13,10 +13,11 @@
 ![BasedMod](Asset/Img/banner.png)
 
 ## ✨ Fonctionnalités
+- ✅ **Rayon Tabac** : ajoute quatre produits vendables — cigarettes Classic, cigarettes Menthol, cigarillos et tabac à rouler — dans un nouveau groupe « Tabac » du carnet de commandes.
+- ✅ **Palier d'arbre de compétences** : ajoute « Tabac I » juste après « Fruits de mer I ». Le palier coûte 1 point de franchise et exige « Fruits de mer I ».
+- ✅ **Prix libres** : les produits passent par la machine à prix comme les autres articles ; leur prix de base est prérempli.
 - ✅ **Multiplicateur de fonds** : modifie les montants ajoutés ou retirés via `GameData.CmdAlterFunds`, sans toucher au reste de l'économie.
-- ✅ **Vitesse ajustable** : multiplicateur appliqué à la marche, au sprint et au déplacement accroupi.
-- ✅ **Hauteur de saut ajustable** : multiplicateur appliqué à `JumpHeight`, pour un saut plus haut sans modifier la gravité ni le `CharacterController`.
-- ✅ **Configuration sans recompilation** : toutes les valeurs se règlent dans un fichier `.cfg` généré par BepInEx.
+- ✅ **Configuration sans recompilation** : le rayon tabac peut être désactivé dans un fichier `.cfg` généré par BepInEx.
 - ✅ **Build automatique** : chaque `dotnet build` copie le DLL du mod directement dans `BepInEx\plugins`.
 
 ## 🛠 Tech Stack
@@ -58,10 +59,11 @@ Ouvre `MonSupermarketMod/MonSupermarketMod.csproj` et adapte la propriété `Gam
 <GameDir>E:\SteamLibrary\steamapps\common\Supermarket Together\</GameDir>
 ```
 
-Les DLL de référence (`BepInEx.dll`, `0Harmony.dll`, `Assembly-CSharp.dll`, `Unity.StarterAssets.dll`, etc.) sont lues depuis ce dossier.
+Les DLL de référence (`BepInEx.dll`, `0Harmony.dll`, `Assembly-CSharp.dll`, `Unity.TextMeshPro.dll`, `Rewired_Core.dll`, etc.) sont lues depuis ce dossier.
 
 ### 4. Compiler et installer le plugin
 ```bash
+cd MonSupermarketMod
 dotnet build -c Release
 ```
 
@@ -77,8 +79,8 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `MonSupermar
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Tu dois y voir :
 
 ```
-Mon Super Mod v1.0.0 chargé.
-[Joueur] Vitesse x2 — marche 10, sprint 20, accroupi 8 | saut x1.8 — hauteur 2.16 m.
+Mon Super Mod v1.1.0 chargé.
+[Tabac] Rayon ajouté : palier 55 ('Tabac I'), groupe 19, produits 339-342. Prérequis : palier 23 ('Fruits de mer I').
 ```
 
 ## 📖 Utilisation
@@ -91,10 +93,8 @@ BepInEx\config\com.username.supermarkettogethermod.cfg
 Modifie les valeurs puis relance le jeu (la configuration est lue au démarrage) :
 
 ```ini
-[Joueur]
-ActiverModifications = true
-MultiplicateurVitesse = 2
-MultiplicateurSaut = 1.8
+[Tabac]
+ActiverRayonTabac = true
 
 [Général]
 MultiplicateurDeFonds = 1
@@ -102,12 +102,19 @@ MultiplicateurDeFonds = 1
 
 | Clé | Section | Défaut | Effet |
 | :--- | :--- | :---: | :--- |
-| `ActiverModifications` | `Joueur` | `true` | Active ou désactive les réglages de vitesse et de saut |
-| `MultiplicateurVitesse` | `Joueur` | `2` | Multiplie marche, sprint et vitesse accroupie |
-| `MultiplicateurSaut` | `Joueur` | `1.8` | Multiplie la hauteur de saut |
+| `ActiverRayonTabac` | `Tabac` | `true` | Ajoute (ou non) le rayon tabac et son palier d'arbre de compétences |
 | `MultiplicateurDeFonds` | `Général` | `1` | Multiplie les fonds ajoutés/retirés (`1` = vanilla) |
 
-Une valeur de `1` conserve le comportement d'origine. Les multiplicateurs sont bornés entre `0.1` et `10`.
+### Utiliser le rayon tabac
+1. Débloque d'abord **Fruits de mer I** dans l'arbre de compétences.
+2. Achète le nœud **Tabac I** (1 point de franchise), placé à côté du nœud Fruits de mer I.
+3. Le groupe **Tabac** apparaît dans le carnet de commandes. Commande les produits, place-les en rayon et vends-les.
+4. Les prix se règlent sur la machine à prix comme pour les autres produits.
+
+### Raccourci F5
+En solo ou en tant qu'hôte, appuie sur **F5** pour ajouter **50 points de franchise**. En multijoueur client, le raccourci est ignoré : les points doivent être modifiés par l'hôte.
+
+> ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` après avoir utilisé le rayon tabac dans une sauvegarde peut rendre cette sauvegarde illisible : garde l'option active pour les parties concernées.
 
 ## 🗂 Structure du projet
 ```text
@@ -118,7 +125,10 @@ BasedMod/
     ├── Plugin.cs
     ├── Patches/
     │   ├── GameDataPatch.cs
-    │   └── PlayerPatches.cs
+    │   └── TobaccoPatches.cs
+    ├── Tobacco/
+    │   ├── TobaccoManager.cs
+    │   └── TobaccoSkillNode.cs
     └── MonSupermarketMod.csproj
 ```
 
