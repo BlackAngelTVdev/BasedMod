@@ -798,16 +798,19 @@ namespace MonSupermarketMod.Tobacco
         private static Vector2 FindFreeAnchoredPosition(Transform root, RectTransform original)
         {
             Vector2 basePosition = original.anchoredPosition;
+
+            // Le nœud "Fruits de mer I" est à gauche de l'étoile décorative :
+            // on descend d'un cran pour placer Tabac I sous l'étoile, sans la masquer.
             Vector2[] offsets =
             {
-                new Vector2(125f, 0f),
+                new Vector2(150f, -125f),
+                new Vector2(150f, -250f),
                 new Vector2(0f, -125f),
-                new Vector2(250f, 0f),
+                new Vector2(250f, -125f),
+                new Vector2(125f, 0f),
                 new Vector2(0f, -250f),
                 new Vector2(-125f, 0f),
-                new Vector2(0f, 125f),
-                new Vector2(375f, 0f),
-                new Vector2(-250f, 0f)
+                new Vector2(0f, 125f)
             };
 
             for (int i = 0; i < offsets.Length; i++)
