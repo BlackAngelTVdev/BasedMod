@@ -1,0 +1,14 @@
+# Build
+bin/
+obj/
+*.user
+.vs/
+
+# BepInEx / fichiers du jeu
+BepInEx/
+doorstop_config.ini
+winhttp.dll
+
+# Outils et fichiers locaux
+.freebuff/
+.tools/

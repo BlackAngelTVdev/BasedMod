@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>MonSupermarketMod</AssemblyName>
+    <RootNamespace>MonSupermarketMod</RootNamespace>
+    <Version>1.0.0</Version>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Chemins vers le jeu et BepInEx -->
+  <PropertyGroup>
+    <GameDir>E:\SteamLibrary\steamapps\common\Supermarket Together\</GameDir>
+    <ManagedDir>$(GameDir)Supermarket Together_Data\Managed\</ManagedDir>
+    <BepInExCoreDir>$(GameDir)BepInEx\core\</BepInExCoreDir>
+    <PluginDir>$(GameDir)BepInEx\plugins\</PluginDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCoreDir)BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCoreDir)0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedDir)UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ManagedDir)UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedDir)Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Requis car GameData hérite de Mirror.NetworkBehaviour -->
+    <Reference Include="Mirror">
+      <HintPath>$(ManagedDir)Mirror.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Contient StarterAssets.FirstPersonController (vitesse / saut) -->
+    <Reference Include="Unity.StarterAssets">
+      <HintPath>$(ManagedDir)Unity.StarterAssets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Post-build : copie le DLL du mod dans BepInEx\plugins -->
+  <Target Name="CopyPluginToGame" AfterTargets="Build">
+    <MakeDir Directories="$(PluginDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginDir)" />
+    <Message Importance="high" Text="MonSupermarketMod copié dans $(PluginDir)$(TargetFileName)" />
+  </Target>
+
+</Project>
