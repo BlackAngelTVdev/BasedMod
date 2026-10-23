@@ -1,16 +1,16 @@
-# 🚀 BasedMod
+# 🚀 ItemAdder
 ![Stars](https://img.shields.io/github/stars/BlackAngelTVdev/BasedMod?style=for-the-badge&color=yellow)
 ![Commits](https://img.shields.io/github/commit-activity/m/BlackAngelTVdev/BasedMod?style=for-the-badge&color=blue)
 ![Issues](https://img.shields.io/github/issues/BlackAngelTVdev/BasedMod?style=for-the-badge&color=orange)
 ![Forks](https://img.shields.io/github/forks/BlackAngelTVdev/BasedMod?style=for-the-badge&color=808080)
 ![Last Commit](https://img.shields.io/github/last-commit/BlackAngelTVdev/BasedMod?style=for-the-badge&color=blue)
 
-> **Un mod BepInEx 5 pour Supermarket Together qui ajoute un rayon tabac et son palier dans l'arbre de compétences.**
+> **ItemAdder — un mod BepInEx 5 pour Supermarket Together qui ajoute les items basiques manquants.**
 
 ---
 
 ## 🧐 Aperçu
-![BasedMod](Asset/Img/banner.png)
+![ItemAdder](Asset/Img/banner.png)
 
 ## ✨ Fonctionnalités
 - ✅ **Rayon Tabac** : ajoute quatre produits vendables — cigarettes Classic, cigarettes Menthol, cigarillos et tabac à rouler — dans un nouveau groupe « Tabac » du carnet de commandes.
@@ -79,7 +79,7 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `MonSupermar
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Tu dois y voir :
 
 ```
-Mon Super Mod v1.1.0 chargé.
+ItemAdder v1.1.0 chargé.
 [Tabac] Rayon ajouté : palier 55 ('Tabac I'), groupe 19, produits 339-342. Prérequis : palier 23 ('Fruits de mer I').
 ```
 

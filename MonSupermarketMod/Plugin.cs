@@ -12,7 +12,7 @@ namespace MonSupermarketMod
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
-        public const string PluginName = "Mon Super Mod";
+        public const string PluginName = "ItemAdder";
         public const string PluginVersion = "1.1.0";
 
         internal static ManualLogSource Log;
