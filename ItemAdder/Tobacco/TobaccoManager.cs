@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -135,6 +136,10 @@ namespace ItemAdder.Tobacco
         };
 
         private static readonly Color GroupColor = new Color(0.55f, 0.12f, 0.12f);
+        private static readonly Color DetailWhite = new Color(0.94f, 0.94f, 0.90f);
+        private static readonly Color DetailLight = new Color(0.82f, 0.82f, 0.78f);
+        private static readonly Color DetailDark = new Color(0.18f, 0.16f, 0.15f);
+        private static readonly Color DetailGold = new Color(0.82f, 0.68f, 0.30f);
 
         private static readonly Dictionary<string, string> Localized =
             new Dictionary<string, string>(StringComparer.Ordinal);
@@ -143,6 +148,14 @@ namespace ItemAdder.Tobacco
         private static readonly List<Material> CreatedMaterials = new List<Material>();
         private static readonly List<Sprite> CreatedSprites = new List<Sprite>();
         private static readonly List<Texture2D> CreatedTextures = new List<Texture2D>();
+
+        // Les prefabs, icônes et matériaux ne dépendent pas de la sauvegarde :
+        // on les construit une seule fois par processus et on les réutilise si le
+        // ProductListing est recréé au chargement d'une autre partie.
+        private static readonly GameObject[] CachedPrefabs = new GameObject[Catalog.Length];
+        private static readonly Sprite[] CachedSprites = new Sprite[Catalog.Length];
+        private static readonly Dictionary<int, Material> CachedMaterials =
+            new Dictionary<int, Material>();
 
         private static ProductListing _configured;
         private static bool _nodeCreated;
@@ -228,7 +241,7 @@ namespace ItemAdder.Tobacco
             int newTierIndex = listing.tiers.Length;
             int newGroupIndex = FindNewGroupIndex(listing);
 
-            DestroyCreatedAssets();
+            Stopwatch setupTimer = Stopwatch.StartNew();
 
             try
             {
@@ -240,7 +253,7 @@ namespace ItemAdder.Tobacco
                 for (int i = 0; i < Catalog.Length; i++)
                 {
                     products[oldProductCount + i] = BuildProduct(
-                        baseData, oldProductCount + i, newTierIndex, Catalog[i]);
+                        baseData, oldProductCount + i, newTierIndex, Catalog[i], i);
                 }
 
                 string[] tiers = new string[newTierIndex + 1];
@@ -294,6 +307,10 @@ namespace ItemAdder.Tobacco
                 ExtendStatistics(listing, oldProductCount + Catalog.Length);
                 RegisterLocalization(newTierIndex, newGroupIndex, oldProductCount);
 
+                Plugin.Log.LogInfo(
+                    $"[Tabac] Catalogue prêt en {setupTimer.ElapsedMilliseconds} ms " +
+                    "(prefabs, icônes et matériaux réutilisés quand ils existent déjà).");
+
                 _configured = listing;
                 _newTierIndex = newTierIndex;
                 _seafoodTierIndex = seafoodIndex;
@@ -313,8 +330,9 @@ namespace ItemAdder.Tobacco
             }
             catch (Exception exception)
             {
+                // Les prefabs déjà construits restent en cache : une nouvelle
+                // tentative (ou une autre sauvegarde) les réutilisera.
                 Plugin.Log.LogError($"[Tabac] Échec de l'ajout du rayon : {exception}");
-                DestroyCreatedAssets();
                 return false;
             }
         }
@@ -546,13 +564,13 @@ namespace ItemAdder.Tobacco
 
         private static ProductListing.ProductData BuildProduct(
             ProductListing.ProductData baseData, int productId, int tierIndex,
-            ProductDefinition definition)
+            ProductDefinition definition, int catalogIndex)
         {
             return new ProductListing.ProductData
             {
                 productID = productId,
-                productPrefab = BuildProductPrefab(baseData, definition, productId),
-                productSprite = BuildProductSprite(definition),
+                productPrefab = GetOrCreatePrefab(baseData, definition, productId, catalogIndex),
+                productSprite = GetOrCreateSprite(definition, catalogIndex),
                 productContainerClass = baseData.productContainerClass,
                 boxClass = baseData.boxClass,
                 maxItemsPerBox = definition.BoxSize,
@@ -566,6 +584,30 @@ namespace ItemAdder.Tobacco
                 trueColliderSize = definition.Size,
                 productColor = definition.Color
             };
+        }
+
+        private static GameObject GetOrCreatePrefab(
+            ProductListing.ProductData baseData, ProductDefinition definition,
+            int productId, int catalogIndex)
+        {
+            GameObject cached = CachedPrefabs[catalogIndex];
+            if (cached != null)
+                return cached;
+
+            GameObject built = BuildProductPrefab(baseData, definition, productId);
+            CachedPrefabs[catalogIndex] = built;
+            return built;
+        }
+
+        private static Sprite GetOrCreateSprite(ProductDefinition definition, int catalogIndex)
+        {
+            Sprite cached = CachedSprites[catalogIndex];
+            if (cached != null)
+                return cached;
+
+            Sprite built = BuildProductSprite(definition);
+            CachedSprites[catalogIndex] = built;
+            return built;
         }
 
         private static GameObject BuildProductPrefab(
@@ -587,7 +629,7 @@ namespace ItemAdder.Tobacco
 
             MeshRenderer renderer = pack.GetComponent<MeshRenderer>();
             if (renderer != null)
-                renderer.sharedMaterial = CreateMaterial(baseData, bodyColor);
+                renderer.sharedMaterial = GetMaterial(baseData, bodyColor);
 
             if (UsesCylinderBody(definition.Look))
             {
@@ -621,10 +663,12 @@ namespace ItemAdder.Tobacco
         private static void AddProductDetails(
             GameObject root, ProductListing.ProductData baseData, ProductDefinition definition)
         {
-            Color light = Color.Lerp(definition.Color, Color.white, 0.55f);
-            Color dark = Color.Lerp(definition.Color, Color.black, 0.42f);
-            Color white = new Color(0.94f, 0.94f, 0.90f);
-            Color gold = new Color(0.82f, 0.68f, 0.30f);
+            // Palette partagée : les détails (étiquettes, capsules, liserés)
+            // n'ont pas besoin d'un matériau propre à chaque produit.
+            Color light = DetailLight;
+            Color dark = DetailDark;
+            Color white = DetailWhite;
+            Color gold = DetailGold;
 
             switch (definition.Look)
             {
@@ -733,7 +777,7 @@ namespace ItemAdder.Tobacco
 
             MeshRenderer renderer = part.GetComponent<MeshRenderer>();
             if (renderer != null)
-                renderer.sharedMaterial = CreateMaterial(baseData, color);
+                renderer.sharedMaterial = GetMaterial(baseData, color);
 
             return part;
         }
@@ -764,6 +808,21 @@ namespace ItemAdder.Tobacco
             {
                 // Le tag du prefab de base n'existe pas forcément, on garde "Untagged".
             }
+        }
+
+        private static Material GetMaterial(ProductListing.ProductData baseData, Color color)
+        {
+            Color32 keyColor = color;
+            int key = (keyColor.r << 16) | (keyColor.g << 8) | keyColor.b;
+
+            if (CachedMaterials.TryGetValue(key, out Material cached) && cached != null)
+                return cached;
+
+            Material created = CreateMaterial(baseData, color);
+            if (created != null)
+                CachedMaterials[key] = created;
+
+            return created;
         }
 
         private static Material CreateMaterial(ProductListing.ProductData baseData, Color color)
@@ -1320,6 +1379,10 @@ namespace ItemAdder.Tobacco
                     Object.Destroy(CreatedMaterials[i]);
             }
             CreatedMaterials.Clear();
+
+            Array.Clear(CachedPrefabs, 0, CachedPrefabs.Length);
+            Array.Clear(CachedSprites, 0, CachedSprites.Length);
+            CachedMaterials.Clear();
         }
     }
 }

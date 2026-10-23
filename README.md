@@ -20,6 +20,7 @@
 - ✅ **Multiplicateur de fonds** : modifie les montants ajoutés ou retirés via `GameData.CmdAlterFunds`, sans toucher au reste de l'économie.
 - ✅ **Configuration sans recompilation** : le rayon tabac peut être désactivé dans un fichier `.cfg` généré par BepInEx.
 - ✅ **Build automatique** : chaque `dotnet build` copie le DLL du mod directement dans `BepInEx\plugins`.
+- ✅ **Chargement optimisé** : les prefabs, icônes et matériaux du rayon sont générés une seule fois puis réutilisés entre les parties ; les temps de chargement sont tracés dans le log (`[Perf]`).
 - ✅ **Launcher Windows** : application native C# (WinForms) qui détecte le jeu, installe BepInEx si nécessaire, compare la version installée aux releases GitHub et met le mod à jour.
 
 ## 🛠 Tech Stack
@@ -51,7 +52,7 @@ Double-clique dessus. Le launcher :
 - installe **BepInEx 5.4.23.5 x64** s'il est absent ;
 - télécharge l'asset de la dernière release (`ItemAdder.dll`, `MonSupermarketMod.dll` ou archive ZIP) et l'installe dans `BepInEx\plugins\ItemAdder.dll` ;
 - remplace l'ancien `MonSupermarketMod.dll` pour éviter de charger deux versions du mod ;
-- permet de lancer le jeu, d'ouvrir `BepInEx\plugins` et d'installer un DLL local pour réparer ou tester un build.
+- permet de lancer le jeu avec le mod, de le lancer en **vanilla** (BepInEx désactivé pour cette session), d'ouvrir `BepInEx\plugins` et d'installer un DLL local pour réparer ou tester un build.
 
 Pour générer l'exécutable depuis les sources :
 
@@ -107,7 +108,7 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.d
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Tu dois y voir :
 
 ```
-ItemAdder v1.2.0 chargé.
+ItemAdder v1.2.1 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
 ```
 

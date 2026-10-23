@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HarmonyLib;
 using ItemAdder.Tobacco;
 
@@ -129,6 +130,35 @@ namespace ItemAdder.Patches
                 return false;
 
             return !listing.unlockedProductTiers[franchiseIndex];
+        }
+    }
+
+    /// <summary>
+    /// Mesure le temps passé dans le chargement de la sauvegarde. Le log permet
+    /// de distinguer le coût du mod de celui des données vanilla.
+    /// </summary>
+    [HarmonyPatch(typeof(SaveBehaviour), nameof(SaveBehaviour.LoadPersistentValues))]
+    internal static class SaveBehaviour_LoadPersistentValues_Patch
+    {
+        private static Stopwatch _timer;
+
+        [HarmonyPrefix]
+        private static void Prefix()
+        {
+            _timer = Stopwatch.StartNew();
+        }
+
+        [HarmonyPostfix]
+        private static void Postfix()
+        {
+            if (_timer == null)
+                return;
+
+            long elapsed = _timer.ElapsedMilliseconds;
+            _timer = null;
+
+            if (elapsed >= 50)
+                Plugin.Log.LogInfo($"[Perf] Chargement de la sauvegarde : {elapsed} ms.");
         }
     }
 }

@@ -31,6 +31,7 @@ public sealed class MainForm : Form
     private readonly RoundedButton _checkButton;
     private readonly RoundedButton _localDllButton;
     private readonly RoundedButton _launchButton;
+    private readonly RoundedButton _vanillaButton;
     private readonly RoundedButton _openFolderButton;
     private readonly RoundedButton _releasesButton;
     private readonly RoundedButton _maximizeButton;
@@ -117,6 +118,7 @@ public sealed class MainForm : Form
             out _checkButton,
             out _localDllButton,
             out _launchButton,
+            out _vanillaButton,
             out _openFolderButton);
         actions.Margin = new Padding(0, 0, 0, 8);
         content.Controls.Add(actions, 0, 3);
@@ -133,6 +135,7 @@ public sealed class MainForm : Form
         _checkButton.Click += CheckButton_Click;
         _localDllButton.Click += LocalDllButton_Click;
         _launchButton.Click += LaunchButton_Click;
+        _vanillaButton.Click += VanillaButton_Click;
         _openFolderButton.Click += OpenFolderButton_Click;
         _releasesButton.Click += (_, _) => OpenUrl(GitHubService.ReleasesUrl);
         _clearLogButton.Click += (_, _) => _logBox.Clear();
@@ -140,6 +143,8 @@ public sealed class MainForm : Form
 
         _toolTip.SetToolTip(_browseButton, "Choisir le dossier qui contient Supermarket Together.exe");
         _toolTip.SetToolTip(_localDllButton, "Installer ou réparer le mod depuis un DLL déjà compilé");
+        _toolTip.SetToolTip(_launchButton, "Lancer Supermarket Together avec BepInEx et ItemAdder");
+        _toolTip.SetToolTip(_vanillaButton, "Lancer le jeu sans BepInEx ni ItemAdder");
         _toolTip.SetToolTip(_openFolderButton, "Ouvrir BepInEx\\plugins dans l'Explorateur");
         _toolTip.SetToolTip(_stateBadge, "État actuel de l'installation");
 
@@ -609,6 +614,7 @@ public sealed class MainForm : Form
         out RoundedButton checkButton,
         out RoundedButton localDllButton,
         out RoundedButton launchButton,
+        out RoundedButton vanillaButton,
         out RoundedButton openFolderButton)
     {
         var actions = new TableLayoutPanel
@@ -690,13 +696,14 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = Theme.Background,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 1,
             Margin = new Padding(0, 6, 0, 0),
             Padding = Padding.Empty
         };
-        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
+        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34f));
+        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
 
         launchButton = new RoundedButton
         {
@@ -709,6 +716,21 @@ public sealed class MainForm : Form
             HoverBackColor = Color.FromArgb(14, 55, 52),
             PressedBackColor = Color.FromArgb(8, 35, 34),
             ForeColor = Color.FromArgb(134, 239, 172),
+            CornerRadius = 8,
+            Font = Theme.Ui(8.5f, FontStyle.Bold),
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        vanillaButton = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Lancer en vanilla",
+            IconGlyph = "\uE768",
+            IconFont = Theme.Icon(8.5f),
+            IconColor = Theme.TextMuted,
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(34, 52, 78),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
             CornerRadius = 8,
             Font = Theme.Ui(8.5f, FontStyle.Bold),
             Margin = new Padding(0, 0, 8, 0)
@@ -729,7 +751,8 @@ public sealed class MainForm : Form
             Margin = Padding.Empty
         };
         secondRow.Controls.Add(launchButton, 0, 0);
-        secondRow.Controls.Add(openFolderButton, 1, 0);
+        secondRow.Controls.Add(vanillaButton, 1, 0);
+        secondRow.Controls.Add(openFolderButton, 2, 0);
 
         actions.Controls.Add(firstRow, 0, 0);
         actions.Controls.Add(secondRow, 0, 1);
@@ -1035,6 +1058,16 @@ public sealed class MainForm : Form
 
     private void LaunchButton_Click(object? sender, EventArgs e)
     {
+        LaunchGame(withoutMods: false);
+    }
+
+    private void VanillaButton_Click(object? sender, EventArgs e)
+    {
+        LaunchGame(withoutMods: true);
+    }
+
+    private void LaunchGame(bool withoutMods)
+    {
         try
         {
             string gamePath = RequireGamePath();
@@ -1045,8 +1078,10 @@ public sealed class MainForm : Form
                 return;
             }
 
-            GameLocator.LaunchGame(gamePath);
-            Log("Lancement de Supermarket Together...");
+            GameLocator.LaunchGame(gamePath, withoutMods);
+            Log(withoutMods
+                ? "Lancement de Supermarket Together en vanilla (BepInEx désactivé)..."
+                : "Lancement de Supermarket Together...");
         }
         catch (Exception ex)
         {
@@ -1332,6 +1367,7 @@ public sealed class MainForm : Form
         _checkButton.Enabled = !busy;
         _localDllButton.Enabled = !busy;
         _launchButton.Enabled = !busy;
+        _vanillaButton.Enabled = !busy;
         _openFolderButton.Enabled = !busy;
         _clearLogButton.Enabled = !busy;
         UseWaitCursor = busy;
@@ -1427,7 +1463,7 @@ public sealed class MainForm : Form
     {
         Version? version = typeof(MainForm).Assembly.GetName().Version;
         return version is null
-            ? "v1.1.0"
+            ? "v1.2.0"
             : $"v{version.Major}.{version.Minor}.{version.Build}";
     }
 

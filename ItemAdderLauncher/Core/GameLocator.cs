@@ -107,7 +107,7 @@ public static class GameLocator
         }
     }
 
-    public static void LaunchGame(string gamePath)
+    public static void LaunchGame(string gamePath, bool withoutMods = false)
     {
         string executable = GetGameExecutablePath(gamePath);
         if (!File.Exists(executable))
@@ -117,12 +117,21 @@ public static class GameLocator
                 executable);
         }
 
-        Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = executable,
             WorkingDirectory = gamePath,
-            UseShellExecute = true
-        });
+            UseShellExecute = !withoutMods
+        };
+
+        if (withoutMods)
+        {
+            // Unity Doorstop 4.5 : cette variable empêche le chargement de
+            // BepInEx et de ses plugins pour ce lancement uniquement.
+            startInfo.Environment["DOORSTOP_DISABLE"] = "TRUE";
+        }
+
+        Process.Start(startInfo);
     }
 
     private static IEnumerable<string> GetSteamLibraries()

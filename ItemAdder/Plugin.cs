@@ -13,7 +13,7 @@ namespace ItemAdder
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "ItemAdder";
-        public const string PluginVersion = "1.2.0";
+        public const string PluginVersion = "1.2.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
