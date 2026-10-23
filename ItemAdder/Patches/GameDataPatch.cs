@@ -1,6 +1,6 @@
 using HarmonyLib;
 
-namespace MonSupermarketMod.Patches
+namespace ItemAdder.Patches
 {
     [HarmonyPatch(typeof(GameData))]
     internal static class GameDataPatch

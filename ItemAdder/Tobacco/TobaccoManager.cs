@@ -6,11 +6,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-namespace MonSupermarketMod.Tobacco
+namespace ItemAdder.Tobacco
 {
     /// <summary>
     /// Ajoute un rayon "Tabac" au jeu, sur le modèle des rayons déjà présents :
-    /// - quatre produits (cigarettes, menthol, cigarillos, tabac à rouler) ;
+    /// - un catalogue complet (cigarettes, tabac à rouler, vapes, snus, cigares, accessoires) ;
     /// - un nouveau palier "Tabac I" dans l'arbre de compétences, après "Fruits de mer I" ;
     /// - les chaînes de localisation associées.
     ///
@@ -24,25 +24,114 @@ namespace MonSupermarketMod.Tobacco
         private const string Brand = "Kiosque";
         private const string TobaccoName = "Tabac I";
 
+        private enum ProductLook
+        {
+            Pack,
+            Pouch,
+            Tube,
+            Bottle,
+            Vape,
+            Tin,
+            Cigar,
+            Lighter,
+            Ashtray,
+            Grinder,
+            Paper,
+            Box
+        }
+
+        private sealed class ProductDefinition
+        {
+            internal readonly string Name;
+            internal readonly float Price;
+            internal readonly int BoxSize;
+            internal readonly Color Color;
+            internal readonly Vector3 Size;
+            internal readonly ProductLook Look;
+
+            internal ProductDefinition(
+                string name, float price, int boxSize, Color color, Vector3 size, ProductLook look)
+            {
+                Name = name;
+                Price = price;
+                BoxSize = boxSize;
+                Color = color;
+                Size = size;
+                Look = look;
+            }
+        }
+
         private static readonly Vector3 PackSize = new Vector3(0.09f, 0.12f, 0.03f);
+        private static readonly Vector3 CigarilloSize = new Vector3(0.09f, 0.07f, 0.035f);
+        private static readonly Vector3 PouchSize = new Vector3(0.11f, 0.14f, 0.04f);
+        private static readonly Vector3 TubeSize = new Vector3(0.10f, 0.05f, 0.04f);
+        private static readonly Vector3 BottleSize = new Vector3(0.06f, 0.15f, 0.06f);
+        private static readonly Vector3 VapeSize = new Vector3(0.035f, 0.15f, 0.035f);
+        private static readonly Vector3 TinSize = new Vector3(0.10f, 0.035f, 0.10f);
+        private static readonly Vector3 CigarSize = new Vector3(0.16f, 0.03f, 0.03f);
+        private static readonly Vector3 LighterSize = new Vector3(0.04f, 0.07f, 0.02f);
+        private static readonly Vector3 AshtraySize = new Vector3(0.13f, 0.03f, 0.13f);
+        private static readonly Vector3 GrinderSize = new Vector3(0.09f, 0.035f, 0.09f);
+        private static readonly Vector3 PaperSize = new Vector3(0.07f, 0.06f, 0.01f);
 
-        private static readonly string[] ProductNames =
+        private static readonly ProductDefinition[] Catalog =
         {
-            "Cigarettes Classic",
-            "Cigarettes Menthol",
-            "Cigarillos",
-            "Tabac à rouler"
-        };
+            // Les quatre premiers produits gardent les noms et les indices de la v1.1,
+            // et le palier reste l'index 55 : les sauvegardes existantes conservent
+            // leur déblocage et leurs prix.
+            // Cigarettes et tabac à rouler
+            new ProductDefinition("Cigarettes Classic", 9.50f, 10, new Color(0.72f, 0.08f, 0.10f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Cigarettes Menthol", 9.90f, 10, new Color(0.05f, 0.45f, 0.25f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Cigarillos", 7.50f, 10, new Color(0.35f, 0.18f, 0.08f), CigarilloSize, ProductLook.Pack),
+            new ProductDefinition("Tabac à rouler", 14.00f, 5, new Color(0.10f, 0.25f, 0.60f), PouchSize, ProductLook.Pouch),
+            new ProductDefinition("Cigarettes Blondes", 9.20f, 10, new Color(0.78f, 0.58f, 0.18f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Cigarettes Brunes", 9.40f, 10, new Color(0.33f, 0.20f, 0.12f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Cigarettes Light", 9.60f, 10, new Color(0.35f, 0.55f, 0.75f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Cigarettes Rollées", 10.20f, 10, new Color(0.10f, 0.48f, 0.46f), PackSize, ProductLook.Pack),
+            new ProductDefinition("Tabac à rouler Blond", 14.50f, 5, new Color(0.62f, 0.38f, 0.12f), PouchSize, ProductLook.Pouch),
+            new ProductDefinition("Tabac à rouler Brun", 14.20f, 5, new Color(0.28f, 0.16f, 0.08f), PouchSize, ProductLook.Pouch),
+            new ProductDefinition("Tabac à rouler Menthol", 14.90f, 5, new Color(0.15f, 0.55f, 0.40f), PouchSize, ProductLook.Pouch),
+            new ProductDefinition("Blague de tabac", 16.00f, 5, new Color(0.55f, 0.35f, 0.12f), PouchSize, ProductLook.Pouch),
+            new ProductDefinition("Tubes à rouler", 3.50f, 20, new Color(0.35f, 0.45f, 0.60f), TubeSize, ProductLook.Tube),
+            new ProductDefinition("Filtres à rouler", 2.80f, 25, new Color(0.75f, 0.75f, 0.70f), new Vector3(0.08f, 0.06f, 0.04f), ProductLook.Box),
+            new ProductDefinition("Filtreuse", 24.90f, 4, new Color(0.22f, 0.24f, 0.28f), new Vector3(0.16f, 0.12f, 0.10f), ProductLook.Box),
+            new ProductDefinition("Feuilles à rouler", 1.80f, 50, new Color(0.88f, 0.82f, 0.55f), PaperSize, ProductLook.Paper),
+            new ProductDefinition("Feuilles à rouler Slim", 2.10f, 50, new Color(0.45f, 0.60f, 0.85f), PaperSize, ProductLook.Paper),
 
-        private static readonly float[] ProductPrices = { 9.50f, 9.90f, 7.50f, 14.00f };
-        private static readonly int[] BoxSizes = { 10, 10, 10, 5 };
+            // Cigarettes électroniques et e-liquides
+            new ProductDefinition("Vape jetable", 12.90f, 10, new Color(0.42f, 0.22f, 0.62f), VapeSize, ProductLook.Vape),
+            new ProductDefinition("Vape jetable Menthe", 13.20f, 10, new Color(0.20f, 0.65f, 0.55f), VapeSize, ProductLook.Vape),
+            new ProductDefinition("Vape jetable Fruits rouges", 13.50f, 10, new Color(0.78f, 0.20f, 0.35f), VapeSize, ProductLook.Vape),
+            new ProductDefinition("E-liquide Tabac", 8.90f, 12, new Color(0.60f, 0.36f, 0.10f), BottleSize, ProductLook.Bottle),
+            new ProductDefinition("E-liquide Menthe", 9.20f, 12, new Color(0.10f, 0.55f, 0.50f), BottleSize, ProductLook.Bottle),
+            new ProductDefinition("E-liquide Fruits rouges", 9.50f, 12, new Color(0.68f, 0.16f, 0.38f), BottleSize, ProductLook.Bottle),
+            new ProductDefinition("Recharge de vape", 7.50f, 12, new Color(0.30f, 0.42f, 0.55f), new Vector3(0.07f, 0.07f, 0.04f), ProductLook.Box),
+            new ProductDefinition("Résistances de vape", 5.90f, 20, new Color(0.55f, 0.58f, 0.62f), new Vector3(0.06f, 0.05f, 0.03f), ProductLook.Box),
 
-        private static readonly Color[] PackColors =
-        {
-            new Color(0.72f, 0.08f, 0.10f),
-            new Color(0.05f, 0.45f, 0.25f),
-            new Color(0.35f, 0.18f, 0.08f),
-            new Color(0.10f, 0.25f, 0.60f)
+            // Nicotine alternative
+            new ProductDefinition("Sachet de nicotine", 6.90f, 20, new Color(0.80f, 0.82f, 0.86f), TinSize, ProductLook.Tin),
+            new ProductDefinition("Nicotine pouches Menthe", 7.20f, 20, new Color(0.35f, 0.70f, 0.55f), TinSize, ProductLook.Tin),
+            new ProductDefinition("Tabac chauffé", 8.50f, 10, new Color(0.55f, 0.40f, 0.20f), new Vector3(0.10f, 0.06f, 0.05f), ProductLook.Box),
+            new ProductDefinition("Bâtonnets de tabac chauffé", 7.90f, 10, new Color(0.65f, 0.42f, 0.22f), new Vector3(0.09f, 0.05f, 0.04f), ProductLook.Box),
+
+            // Cigares et cigarillos
+            new ProductDefinition("Cigare", 6.50f, 10, new Color(0.42f, 0.24f, 0.12f), CigarSize, ProductLook.Cigar),
+            new ProductDefinition("Cigare premium", 12.90f, 5, new Color(0.30f, 0.14f, 0.10f), new Vector3(0.18f, 0.035f, 0.035f), ProductLook.Cigar),
+            new ProductDefinition("Cigarillos vanille", 7.90f, 10, new Color(0.75f, 0.60f, 0.30f), new Vector3(0.12f, 0.025f, 0.025f), ProductLook.Cigar),
+            new ProductDefinition("Cave à cigares", 39.90f, 2, new Color(0.38f, 0.18f, 0.12f), new Vector3(0.18f, 0.10f, 0.12f), ProductLook.Box),
+            new ProductDefinition("Humidificateur", 9.90f, 6, new Color(0.52f, 0.34f, 0.18f), new Vector3(0.07f, 0.07f, 0.05f), ProductLook.Box),
+
+            // Articles pour fumeurs
+            new ProductDefinition("Briquet", 2.50f, 25, new Color(0.70f, 0.18f, 0.18f), LighterSize, ProductLook.Lighter),
+            new ProductDefinition("Zippo", 18.90f, 10, new Color(0.60f, 0.62f, 0.66f), new Vector3(0.045f, 0.075f, 0.02f), ProductLook.Lighter),
+            new ProductDefinition("Briquet tempête", 4.90f, 20, new Color(0.80f, 0.42f, 0.12f), new Vector3(0.05f, 0.08f, 0.025f), ProductLook.Lighter),
+            new ProductDefinition("Cendrier", 7.90f, 6, new Color(0.28f, 0.30f, 0.34f), AshtraySize, ProductLook.Ashtray),
+            new ProductDefinition("Cendrier de poche", 3.50f, 12, new Color(0.65f, 0.68f, 0.72f), new Vector3(0.08f, 0.025f, 0.08f), ProductLook.Ashtray),
+            new ProductDefinition("Grinder", 8.90f, 10, new Color(0.38f, 0.24f, 0.55f), GrinderSize, ProductLook.Grinder),
+            new ProductDefinition("Grinder métal", 14.90f, 8, new Color(0.35f, 0.38f, 0.42f), new Vector3(0.10f, 0.04f, 0.10f), ProductLook.Grinder),
+            new ProductDefinition("Filtres cigarettes", 3.20f, 25, new Color(0.78f, 0.78f, 0.74f), new Vector3(0.08f, 0.06f, 0.04f), ProductLook.Box),
+            new ProductDefinition("Étui à cigarettes", 5.90f, 10, new Color(0.18f, 0.16f, 0.15f), new Vector3(0.10f, 0.07f, 0.04f), ProductLook.Box),
+            new ProductDefinition("Porte-cigarette", 4.50f, 12, new Color(0.72f, 0.58f, 0.25f), new Vector3(0.09f, 0.05f, 0.03f), ProductLook.Box)
         };
 
         private static readonly Color GroupColor = new Color(0.55f, 0.12f, 0.12f);
@@ -93,11 +182,11 @@ namespace MonSupermarketMod.Tobacco
 
             // Un client qui rejoint un hôte déjà moddé reçoit les SyncVar étendues
             // avant que son propre productsData local ne soit complété. On détecte
-            // ce cas pour ne pas ajouter une seconde fois les quatre produits.
+            // ce cas pour ne pas ajouter une seconde fois le catalogue.
             bool syncAlreadyExtended =
                 listing.unlockedProductTiers.Length == listing.tiers.Length + 1 &&
                 listing.tierInflation.Length == listing.tiers.Length + 1 &&
-                listing.productPlayerPricing.Length == listing.productsData.Length + ProductNames.Length;
+                listing.productPlayerPricing.Length == listing.productsData.Length + Catalog.Length;
 
             if (!syncAlreadyExtended)
             {
@@ -145,18 +234,18 @@ namespace MonSupermarketMod.Tobacco
             {
                 ProductListing.ProductData baseData = listing.productsData[baseProductId];
                 ProductListing.ProductData[] products =
-                    new ProductListing.ProductData[oldProductCount + ProductNames.Length];
+                    new ProductListing.ProductData[oldProductCount + Catalog.Length];
 
                 Array.Copy(listing.productsData, products, oldProductCount);
-                for (int i = 0; i < ProductNames.Length; i++)
+                for (int i = 0; i < Catalog.Length; i++)
                 {
                     products[oldProductCount + i] = BuildProduct(
-                        baseData, oldProductCount + i, newTierIndex, i);
+                        baseData, oldProductCount + i, newTierIndex, Catalog[i]);
                 }
 
                 string[] tiers = new string[newTierIndex + 1];
                 Array.Copy(listing.tiers, tiers, newTierIndex);
-                tiers[newTierIndex] = oldProductCount + "-" + (oldProductCount + ProductNames.Length - 1);
+                tiers[newTierIndex] = oldProductCount + "-" + (oldProductCount + Catalog.Length - 1);
 
                 int[] groups = new int[newTierIndex + 1];
                 Array.Copy(listing.productGroups, groups, newTierIndex);
@@ -173,10 +262,10 @@ namespace MonSupermarketMod.Tobacco
 
                 if (!syncAlreadyExtended)
                 {
-                    float[] pricing = new float[oldProductCount + ProductNames.Length];
+                    float[] pricing = new float[oldProductCount + Catalog.Length];
                     Array.Copy(listing.productPlayerPricing, pricing, oldProductCount);
-                    for (int i = 0; i < ProductNames.Length; i++)
-                        pricing[oldProductCount + i] = ProductPrices[i];
+                    for (int i = 0; i < Catalog.Length; i++)
+                        pricing[oldProductCount + i] = Catalog[i].Price;
 
                     bool[] unlocked = new bool[newTierIndex + 1];
                     Array.Copy(listing.unlockedProductTiers, unlocked, newTierIndex);
@@ -202,7 +291,7 @@ namespace MonSupermarketMod.Tobacco
                     }
                 }
 
-                ExtendStatistics(listing, oldProductCount + ProductNames.Length);
+                ExtendStatistics(listing, oldProductCount + Catalog.Length);
                 RegisterLocalization(newTierIndex, newGroupIndex, oldProductCount);
 
                 _configured = listing;
@@ -214,8 +303,8 @@ namespace MonSupermarketMod.Tobacco
                 _nodeIcon = products[oldProductCount].productSprite;
 
                 Plugin.Log.LogInfo(
-                    $"[Tabac] Rayon ajouté : palier {newTierIndex} ('{TobaccoName}'), " +
-                    $"groupe {newGroupIndex}, produits {oldProductCount}-{oldProductCount + ProductNames.Length - 1}. " +
+                    $"[Tabac] Rayon ajouté : {Catalog.Length} produits, palier {newTierIndex} ('{TobaccoName}'), " +
+                    $"groupe {newGroupIndex}, produits {oldProductCount}-{oldProductCount + Catalog.Length - 1}. " +
                     $"Prérequis : palier {seafoodIndex} ('Fruits de mer I').");
 
                 bool ready = EnsureNodeOrRetry(listing);
@@ -456,83 +545,225 @@ namespace MonSupermarketMod.Tobacco
         }
 
         private static ProductListing.ProductData BuildProduct(
-            ProductListing.ProductData baseData, int productId, int tierIndex, int variant)
+            ProductListing.ProductData baseData, int productId, int tierIndex,
+            ProductDefinition definition)
         {
             return new ProductListing.ProductData
             {
                 productID = productId,
-                productPrefab = BuildPackPrefab(baseData, PackColors[variant], ProductNames[variant]),
-                productSprite = BuildPackSprite(PackColors[variant], ProductNames[variant]),
+                productPrefab = BuildProductPrefab(baseData, definition, productId),
+                productSprite = BuildProductSprite(definition),
                 productContainerClass = baseData.productContainerClass,
                 boxClass = baseData.boxClass,
-                maxItemsPerBox = BoxSizes[variant],
-                basePricePerUnit = ProductPrices[variant],
+                maxItemsPerBox = definition.BoxSize,
+                basePricePerUnit = definition.Price,
                 productBrand = Brand,
                 productTier = tierIndex,
                 isStackable = true,
-                colliderSize = PackSize,
+                colliderSize = definition.Size,
                 colliderCenter = Vector3.zero,
                 hasTrueCollider = false,
-                trueColliderSize = PackSize,
-                productColor = PackColors[variant]
+                trueColliderSize = definition.Size,
+                productColor = definition.Color
             };
         }
 
-        private static GameObject BuildPackPrefab(
-            ProductListing.ProductData baseData, Color color, string name)
+        private static GameObject BuildProductPrefab(
+            ProductListing.ProductData baseData, ProductDefinition definition, int productId)
         {
             GameObject pack = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            pack.name = "TobaccoPack_" + name.Replace(' ', '_');
+            pack.name = "Tobacco_" + productId + "_" + definition.Name.Replace(' ', '_');
             pack.transform.position = new Vector3(0f, -5000f, 0f);
-            pack.transform.localScale = PackSize;
+            pack.transform.localScale = definition.Size;
 
-            Collider packCollider = pack.GetComponent<Collider>();
-            if (packCollider != null)
-            {
-                // Destroy est différé : on désactive tout de suite pour que les clones
-                // instantanés dans la même frame n'héritent pas d'un collider actif.
-                packCollider.enabled = false;
-                Object.Destroy(packCollider);
-            }
+            RemoveCollider(pack);
+            ApplyBaseMetadata(pack, baseData);
+
+            // Les feuilles à rouler sont blanches : la couleur du catalogue sert
+            // uniquement de liseré sur l'emballage.
+            Color bodyColor = definition.Look == ProductLook.Paper
+                ? new Color(0.94f, 0.94f, 0.90f)
+                : definition.Color;
 
             MeshRenderer renderer = pack.GetComponent<MeshRenderer>();
             if (renderer != null)
-                renderer.sharedMaterial = CreateMaterial(baseData, color);
+                renderer.sharedMaterial = CreateMaterial(baseData, bodyColor);
 
-            if (baseData.productPrefab != null)
+            if (UsesCylinderBody(definition.Look))
             {
-                pack.layer = baseData.productPrefab.layer;
-                try
-                {
-                    pack.tag = baseData.productPrefab.tag;
-                }
-                catch (Exception)
-                {
-                    // Le tag du prefab de base n'existe pas forcément, on garde "Untagged".
-                }
+                // Le cube racine reste le conteneur (taille et orientation stables)
+                // mais il devient invisible : le visuel est un cylindre enfant.
+                if (renderer != null)
+                    renderer.enabled = false;
+
+                GameObject body = AddPart(
+                    pack, baseData, PrimitiveType.Cylinder, Vector3.zero,
+                    new Vector3(1f, 0.5f, 1f), bodyColor, "Body");
+
+                if (definition.Look == ProductLook.Cigar)
+                    body.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
             }
 
-            GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            stripe.name = "Stripe";
-            stripe.transform.SetParent(pack.transform, false);
-            stripe.transform.localPosition = new Vector3(0f, 0.32f, 0f);
-            stripe.transform.localScale = new Vector3(1.02f, 0.16f, 1.02f);
-            stripe.layer = pack.layer;
-
-            Collider stripeCollider = stripe.GetComponent<Collider>();
-            if (stripeCollider != null)
-            {
-                stripeCollider.enabled = false;
-                Object.Destroy(stripeCollider);
-            }
-
-            MeshRenderer stripeRenderer = stripe.GetComponent<MeshRenderer>();
-            if (stripeRenderer != null)
-                stripeRenderer.sharedMaterial = CreateMaterial(baseData, new Color(0.94f, 0.94f, 0.90f));
+            AddProductDetails(pack, baseData, definition);
 
             Object.DontDestroyOnLoad(pack);
             CreatedPrefabs.Add(pack);
             return pack;
+        }
+
+        private static bool UsesCylinderBody(ProductLook look)
+        {
+            return look == ProductLook.Bottle || look == ProductLook.Vape ||
+                   look == ProductLook.Tin || look == ProductLook.Cigar ||
+                   look == ProductLook.Ashtray || look == ProductLook.Grinder;
+        }
+
+        private static void AddProductDetails(
+            GameObject root, ProductListing.ProductData baseData, ProductDefinition definition)
+        {
+            Color light = Color.Lerp(definition.Color, Color.white, 0.55f);
+            Color dark = Color.Lerp(definition.Color, Color.black, 0.42f);
+            Color white = new Color(0.94f, 0.94f, 0.90f);
+            Color gold = new Color(0.82f, 0.68f, 0.30f);
+
+            switch (definition.Look)
+            {
+                case ProductLook.Pack:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0f),
+                        new Vector3(1.02f, 0.30f, 1.02f), white, "Band");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.47f, 0f),
+                        new Vector3(1.03f, 0.10f, 1.03f), gold, "Top");
+                    break;
+
+                case ProductLook.Pouch:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.42f, 0f),
+                        new Vector3(1.01f, 0.14f, 1.01f), dark, "Seal");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
+                        new Vector3(0.70f, 0.36f, 1.03f), white, "Label");
+                    break;
+
+                case ProductLook.Tube:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.20f, 0f),
+                        new Vector3(1.02f, 0.26f, 1.02f), white, "Label");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                        new Vector3(1.03f, 0.10f, 1.03f), light, "Lid");
+                    break;
+
+                case ProductLook.Bottle:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                        new Vector3(0.64f, 0.28f, 0.64f), dark, "Cap");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.08f, 0f),
+                        new Vector3(1.03f, 0.46f, 1.03f), white, "Label");
+                    break;
+
+                case ProductLook.Vape:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                        new Vector3(0.80f, 0.18f, 0.80f), gold, "Mouthpiece");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.46f, 0f),
+                        new Vector3(0.85f, 0.10f, 0.85f), light, "Tip");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.02f, 0f),
+                        new Vector3(1.04f, 0.18f, 1.04f), white, "Label");
+                    break;
+
+                case ProductLook.Tin:
+                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.38f, 0f),
+                        new Vector3(1.02f, 0.12f, 1.02f), light, "Lid");
+                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0f),
+                        new Vector3(1.04f, 0.20f, 1.04f), white, "Label");
+                    break;
+
+                case ProductLook.Cigar:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
+                        new Vector3(0.14f, 1.06f, 1.06f), gold, "Band");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.47f, 0f, 0f),
+                        new Vector3(0.06f, 1.04f, 1.04f), dark, "Tip");
+                    break;
+
+                case ProductLook.Lighter:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f),
+                        new Vector3(1.02f, 0.34f, 1.02f), light, "Cap");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.18f, 0.33f, 0f),
+                        new Vector3(0.30f, 0.26f, 1.06f), dark, "Wheel");
+                    break;
+
+                case ProductLook.Ashtray:
+                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.48f, 0f),
+                        new Vector3(0.72f, 0.10f, 0.72f), dark, "Bowl");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(-0.36f, 0.55f, 0f),
+                        new Vector3(0.16f, 0.16f, 0.22f), light, "Notch");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.36f, 0.55f, 0f),
+                        new Vector3(0.16f, 0.16f, 0.22f), light, "Notch");
+                    break;
+
+                case ProductLook.Grinder:
+                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.45f, 0f),
+                        new Vector3(1.02f, 0.14f, 1.02f), dark, "Lid");
+                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.56f, 0f),
+                        new Vector3(0.24f, 0.08f, 0.24f), gold, "Handle");
+                    break;
+
+                case ProductLook.Paper:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
+                        new Vector3(1.02f, 0.24f, 1.02f), definition.Color, "Stripe");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.20f, 0f),
+                        new Vector3(0.72f, 0.14f, 1.03f), light, "Mark");
+                    break;
+
+                default:
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f),
+                        new Vector3(1.02f, 0.10f, 1.02f), dark, "Lid");
+                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
+                        new Vector3(0.62f, 0.34f, 1.03f), white, "Label");
+                    break;
+            }
+        }
+
+        private static GameObject AddPart(
+            GameObject root, ProductListing.ProductData baseData, PrimitiveType primitive,
+            Vector3 localPosition, Vector3 localScale, Color color, string name)
+        {
+            GameObject part = GameObject.CreatePrimitive(primitive);
+            part.name = name;
+            part.transform.SetParent(root.transform, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = localScale;
+
+            RemoveCollider(part);
+            ApplyBaseMetadata(part, baseData);
+
+            MeshRenderer renderer = part.GetComponent<MeshRenderer>();
+            if (renderer != null)
+                renderer.sharedMaterial = CreateMaterial(baseData, color);
+
+            return part;
+        }
+
+        private static void RemoveCollider(GameObject value)
+        {
+            Collider collider = value.GetComponent<Collider>();
+            if (collider == null)
+                return;
+
+            // Destroy est différé : on désactive tout de suite pour que les clones
+            // instantanés dans la même frame n'héritent pas d'un collider actif.
+            collider.enabled = false;
+            Object.Destroy(collider);
+        }
+
+        private static void ApplyBaseMetadata(GameObject value, ProductListing.ProductData baseData)
+        {
+            if (baseData.productPrefab == null)
+                return;
+
+            value.layer = baseData.productPrefab.layer;
+            try
+            {
+                value.tag = baseData.productPrefab.tag;
+            }
+            catch (Exception)
+            {
+                // Le tag du prefab de base n'existe pas forcément, on garde "Untagged".
+            }
         }
 
         private static Material CreateMaterial(ProductListing.ProductData baseData, Color color)
@@ -596,34 +827,147 @@ namespace MonSupermarketMod.Tobacco
             return material;
         }
 
-        private static Sprite BuildPackSprite(Color color, string name)
+        private static Sprite BuildProductSprite(ProductDefinition definition)
         {
             const int size = 64;
 
             Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            texture.name = "TobaccoIcon_" + name.Replace(' ', '_');
+            texture.name = "TobaccoIcon_" + definition.Name.Replace(' ', '_');
             texture.filterMode = FilterMode.Point;
+            texture.wrapMode = TextureWrapMode.Clamp;
 
-            Color32 body = color;
+            Color32 body = definition.Color;
+            Color32 light = Color.Lerp(definition.Color, Color.white, 0.55f);
+            Color32 dark = Color.Lerp(definition.Color, Color.black, 0.42f);
             Color32 white = new Color32(240, 240, 236, 255);
             Color32 gold = new Color32(210, 174, 74, 255);
             Color32 border = new Color32(28, 24, 24, 255);
 
             Color32[] pixels = new Color32[size * size];
-            for (int y = 0; y < size; y++)
+
+            switch (definition.Look)
             {
+                case ProductLook.Pack:
+                    FillRect(pixels, size, 15, 5, 48, 58, border);
+                    FillRect(pixels, size, 17, 7, 46, 56, body);
+                    FillRect(pixels, size, 17, 7, 46, 12, gold);
+                    FillRect(pixels, size, 17, 21, 46, 29, white);
+                    FillRect(pixels, size, 17, 21, 46, 22, light);
+                    FillRect(pixels, size, 44, 12, 46, 56, light);
+                    break;
+
+                case ProductLook.Pouch:
+                    FillRect(pixels, size, 13, 10, 50, 56, border);
+                    FillRect(pixels, size, 15, 13, 48, 54, body);
+                    FillRect(pixels, size, 15, 13, 48, 18, dark);
+                    FillRect(pixels, size, 21, 29, 42, 41, white);
+                    FillRect(pixels, size, 24, 32, 39, 36, light);
+                    break;
+
+                case ProductLook.Tube:
+                    FillRect(pixels, size, 17, 11, 46, 54, border);
+                    FillRect(pixels, size, 19, 13, 44, 52, body);
+                    FillRect(pixels, size, 19, 20, 44, 27, white);
+                    FillRect(pixels, size, 19, 13, 44, 17, light);
+                    FillRect(pixels, size, 24, 31, 26, 48, white);
+                    FillRect(pixels, size, 31, 31, 33, 48, white);
+                    FillRect(pixels, size, 38, 31, 40, 48, white);
+                    break;
+
+                case ProductLook.Bottle:
+                    FillRect(pixels, size, 25, 4, 39, 12, border);
+                    FillRect(pixels, size, 27, 6, 37, 10, dark);
+                    FillRect(pixels, size, 27, 11, 37, 21, border);
+                    FillRect(pixels, size, 29, 13, 35, 20, body);
+                    FillRect(pixels, size, 20, 19, 44, 57, border);
+                    FillRect(pixels, size, 22, 21, 42, 55, body);
+                    FillRect(pixels, size, 22, 33, 42, 45, white);
+                    FillRect(pixels, size, 25, 23, 28, 30, light);
+                    break;
+
+                case ProductLook.Vape:
+                    FillRect(pixels, size, 25, 8, 39, 57, border);
+                    FillRect(pixels, size, 27, 10, 37, 55, body);
+                    FillRect(pixels, size, 27, 3, 37, 9, gold);
+                    FillRect(pixels, size, 28, 50, 36, 54, light);
+                    FillRect(pixels, size, 26, 28, 38, 36, white);
+                    break;
+
+                case ProductLook.Tin:
+                    FillEllipse(pixels, size, 32, 34, 21, 15, border);
+                    FillEllipse(pixels, size, 32, 34, 19, 13, body);
+                    FillEllipse(pixels, size, 32, 35, 15, 9, light);
+                    FillEllipse(pixels, size, 32, 36, 11, 6, white);
+                    break;
+
+                case ProductLook.Cigar:
+                    FillRect(pixels, size, 7, 25, 57, 39, border);
+                    FillEllipse(pixels, size, 10, 32, 4, 7, border);
+                    FillEllipse(pixels, size, 54, 32, 4, 7, border);
+                    FillRect(pixels, size, 9, 27, 55, 37, body);
+                    FillEllipse(pixels, size, 10, 32, 3, 5, body);
+                    FillEllipse(pixels, size, 54, 32, 3, 5, body);
+                    FillRect(pixels, size, 12, 27, 52, 29, light);
+                    FillRect(pixels, size, 33, 25, 39, 39, gold);
+                    FillRect(pixels, size, 55, 27, 57, 37, dark);
+                    break;
+
+                case ProductLook.Lighter:
+                    FillRect(pixels, size, 19, 10, 44, 56, border);
+                    FillRect(pixels, size, 21, 12, 42, 54, body);
+                    FillRect(pixels, size, 21, 12, 42, 19, light);
+                    FillRect(pixels, size, 27, 18, 36, 25, dark);
+                    FillRect(pixels, size, 21, 45, 42, 53, dark);
+                    FillRect(pixels, size, 23, 22, 25, 43, light);
+                    break;
+
+                case ProductLook.Ashtray:
+                    FillEllipse(pixels, size, 32, 35, 23, 15, border);
+                    FillEllipse(pixels, size, 32, 35, 21, 13, body);
+                    FillEllipse(pixels, size, 32, 37, 16, 8, dark);
+                    FillEllipse(pixels, size, 32, 39, 13, 5, light);
+                    break;
+
+                case ProductLook.Grinder:
+                    FillEllipse(pixels, size, 32, 32, 21, 21, border);
+                    FillEllipse(pixels, size, 32, 32, 19, 19, body);
+                    FillEllipse(pixels, size, 32, 32, 15, 15, dark);
+                    FillEllipse(pixels, size, 32, 32, 12, 12, light);
+                    for (int i = 0; i < 8; i++)
+                    {
+                        double angle = i * Math.PI / 4.0;
+                        int x = 32 + (int)Math.Round(Math.Cos(angle) * 16.0);
+                        int y = 32 + (int)Math.Round(Math.Sin(angle) * 16.0);
+                        FillEllipse(pixels, size, x, y, 2, 2, dark);
+                    }
+                    FillEllipse(pixels, size, 32, 32, 4, 4, gold);
+                    break;
+
+                case ProductLook.Paper:
+                    FillRect(pixels, size, 10, 18, 53, 46, border);
+                    FillRect(pixels, size, 12, 20, 51, 44, white);
+                    FillRect(pixels, size, 12, 20, 51, 25, body);
+                    FillRect(pixels, size, 20, 28, 43, 31, light);
+                    break;
+
+                default:
+                    FillRect(pixels, size, 13, 11, 50, 52, border);
+                    FillRect(pixels, size, 15, 13, 48, 50, body);
+                    FillRect(pixels, size, 15, 13, 48, 19, dark);
+                    FillRect(pixels, size, 21, 28, 42, 40, white);
+                    break;
+            }
+
+            // Les coordonnées ci-dessus sont dessinées de haut en bas ; les textures
+            // Unity ont leur origine en bas à gauche : on inverse les lignes.
+            for (int y = 0; y < size / 2; y++)
+            {
+                int opposite = size - 1 - y;
                 for (int x = 0; x < size; x++)
                 {
-                    Color32 pixel = body;
-
-                    if (y >= 44 && y <= 52)
-                        pixel = white;
-                    if (y >= 60)
-                        pixel = gold;
-                    if (x < 2 || x > size - 3 || y < 2 || y > size - 3)
-                        pixel = border;
-
-                    pixels[y * size + x] = pixel;
+                    Color32 swap = pixels[y * size + x];
+                    pixels[y * size + x] = pixels[opposite * size + x];
+                    pixels[opposite * size + x] = swap;
                 }
             }
 
@@ -635,11 +979,59 @@ namespace MonSupermarketMod.Tobacco
                 new Rect(0f, 0f, size, size),
                 new Vector2(0.5f, 0.5f),
                 size);
-            sprite.name = "TobaccoIcon_" + name.Replace(' ', '_');
+            sprite.name = "TobaccoIcon_" + definition.Name.Replace(' ', '_');
 
             CreatedTextures.Add(texture);
             CreatedSprites.Add(sprite);
             return sprite;
+        }
+
+        private static void FillRect(
+            Color32[] pixels, int size, int x0, int y0, int x1, int y1, Color32 color)
+        {
+            if (x0 > x1)
+            {
+                int swap = x0;
+                x0 = x1;
+                x1 = swap;
+            }
+            if (y0 > y1)
+            {
+                int swap = y0;
+                y0 = y1;
+                y1 = swap;
+            }
+
+            x0 = Math.Max(0, x0);
+            y0 = Math.Max(0, y0);
+            x1 = Math.Min(size - 1, x1);
+            y1 = Math.Min(size - 1, y1);
+
+            for (int y = y0; y <= y1; y++)
+            {
+                for (int x = x0; x <= x1; x++)
+                    pixels[y * size + x] = color;
+            }
+        }
+
+        private static void FillEllipse(
+            Color32[] pixels, int size, int cx, int cy, int rx, int ry, Color32 color)
+        {
+            int minX = Math.Max(0, cx - rx);
+            int maxX = Math.Min(size - 1, cx + rx);
+            int minY = Math.Max(0, cy - ry);
+            int maxY = Math.Min(size - 1, cy + ry);
+
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    double dx = (double)(x - cx) / Math.Max(1, rx);
+                    double dy = (double)(y - cy) / Math.Max(1, ry);
+                    if (dx * dx + dy * dy <= 1.0)
+                        pixels[y * size + x] = color;
+                }
+            }
         }
 
         private static GameObject CreateSkillNode(
@@ -893,10 +1285,10 @@ namespace MonSupermarketMod.Tobacco
             Localized["productGroup" + groupIndex] = "Tabac";
             Localized["productCategory" + tierIndex] = TobaccoName;
             Localized["tobaccoUnlock"] =
-                "Débloque le rayon tabac : cigarettes, cigarillos et tabac à rouler.";
+                "Débloque le rayon tabac complet : cigarettes, tabac à rouler, vapes, snus, cigares et accessoires.";
 
-            for (int i = 0; i < ProductNames.Length; i++)
-                Localized["product" + (firstProductId + i)] = ProductNames[i];
+            for (int i = 0; i < Catalog.Length; i++)
+                Localized["product" + (firstProductId + i)] = Catalog[i].Name;
         }
 
         private static void DestroyCreatedAssets()

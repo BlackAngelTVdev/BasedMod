@@ -3,9 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>MonSupermarketMod</AssemblyName>
-    <RootNamespace>MonSupermarketMod</RootNamespace>
-    <Version>1.1.0</Version>
+    <AssemblyName>ItemAdder</AssemblyName>
+    <RootNamespace>ItemAdder</RootNamespace>
+    <Version>1.2.0</Version>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
@@ -75,8 +75,10 @@
   <!-- Post-build : copie le DLL du mod dans BepInEx\plugins -->
   <Target Name="CopyPluginToGame" AfterTargets="Build">
     <MakeDir Directories="$(PluginDir)" />
+    <!-- Évite de charger l'ancien DLL en plus du nouveau après le renommage. -->
+    <Delete Files="$(PluginDir)MonSupermarketMod.dll" ContinueOnError="true" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginDir)" />
-    <Message Importance="high" Text="MonSupermarketMod copié dans $(PluginDir)$(TargetFileName)" />
+    <Message Importance="high" Text="ItemAdder copié dans $(PluginDir)$(TargetFileName)" />
   </Target>
 
 </Project>

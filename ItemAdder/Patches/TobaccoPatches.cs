@@ -1,7 +1,7 @@
 using HarmonyLib;
-using MonSupermarketMod.Tobacco;
+using ItemAdder.Tobacco;
 
-namespace MonSupermarketMod.Patches
+namespace ItemAdder.Patches
 {
     /// <summary>
     /// Étend les tableaux dès l'Awake du ProductListing, avant que SaveBehaviour

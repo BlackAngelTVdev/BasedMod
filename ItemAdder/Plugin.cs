@@ -5,7 +5,7 @@ using HarmonyLib;
 using Mirror;
 using UnityEngine;
 
-namespace MonSupermarketMod
+namespace ItemAdder
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     [BepInProcess("Supermarket Together.exe")]
@@ -13,7 +13,7 @@ namespace MonSupermarketMod
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "ItemAdder";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.2.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
@@ -35,7 +35,7 @@ namespace MonSupermarketMod
                 "Tabac",
                 "ActiverRayonTabac",
                 true,
-                "Ajoute le rayon Tabac (cigarettes, cigarillos, tabac à rouler) et son palier dans l'arbre de compétences.");
+                "Ajoute le rayon Tabac (cigarettes, tabac à rouler, vapes, snus, cigares, accessoires) et son palier dans l'arbre de compétences.");
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();

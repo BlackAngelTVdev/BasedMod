@@ -1,7 +1,7 @@
 using Rewired;
 using UnityEngine;
 
-namespace MonSupermarketMod.Tobacco
+namespace ItemAdder.Tobacco
 {
     /// <summary>
     /// Gère le clic sur le nœud "Tabac I" ajouté à l'arbre de compétences.
