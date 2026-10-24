@@ -5,40 +5,110 @@
 ![Forks](https://img.shields.io/github/forks/BlackAngelTVdev/BasedMod?style=for-the-badge&color=808080)
 ![Last Commit](https://img.shields.io/github/last-commit/BlackAngelTVdev/BasedMod?style=for-the-badge&color=blue)
 
-> **ItemAdder — un mod BepInEx 5 pour Supermarket Together qui ajoute les items basiques manquants.**
+> **ItemAdder — un mod BepInEx 5 pour Supermarket Together : un rayon tabac complet, un sous-sol clandestin à cultiver, des employés plus logiques, et un launcher Windows qui installe et met à jour le tout.**
 
 ---
 
 ## 🧐 Aperçu
 ![ItemAdder](Asset/Img/banner.png)
 
-## ✨ Fonctionnalités
-- ✅ **Rayon Tabac** : ajoute 44 produits vendables dans un nouveau groupe « Tabac » du carnet de commandes — cigarettes, tabac à rouler, tubes et filtres, vapes jetables et e-liquides, snus, tabac chauffé, cigares et articles pour fumeurs.
-- ✅ **Modèles 3D générés** : chaque produit a son propre maillage (coques biseautées, pièces tournées : paquet, blague, bouteille, vape, boîte métallique, cigare, briquet, cendrier, grinder, bourgeon), construit sommet par sommet au chargement — aucune primitive Unity, aucun fichier externe à installer.
-- ✅ **Palier d'arbre de compétences** : ajoute « Tabac I » juste après « Fruits de mer I ». Le palier coûte 1 point de franchise et exige « Fruits de mer I ».
-- ✅ **Prix libres** : les produits passent par la machine à prix comme les autres articles ; leur prix de base est prérempli.
-- ✅ **Multiplicateur de fonds** : modifie les montants ajoutés ou retirés via `GameData.CmdAlterFunds`, sans toucher au reste de l'économie.
-- ✅ **Configuration sans recompilation** : le rayon tabac peut être désactivé dans un fichier `.cfg` généré par BepInEx.
-- ✅ **Sous-sol clandestin** : culture d'herbes sous le magasin, trappe discrète dans la surface de vente (côté rue, à droite), rayon de vente à l'étage, police et amendes — jouable en solo comme en multijoueur.
-- ✅ **Employés plus logiques** : un produit resté en réserve et jamais posé sur une étagère est rangé par un employé de réassort, sur l'étagère compatible la plus proche.
-- ✅ **Build automatique** : chaque `dotnet build` copie le DLL du mod directement dans `BepInEx\plugins`.
-- ✅ **Chargement optimisé** : les prefabs, icônes et matériaux du rayon sont générés une seule fois puis réutilisés entre les parties ; les temps de chargement sont tracés dans le log (`[Perf]`).
-- ✅ **Launcher Windows** : application native C# (WinForms) qui détecte le jeu, installe BepInEx si nécessaire, compare la version installée aux releases GitHub et met le mod à jour.
+Le projet contient deux programmes indépendants, qui peuvent être utilisés séparément :
 
-## 🛠 Tech Stack
-| Technologie | Usage |
-| :--- | :--- |
-| ![C#](https://img.shields.io/badge/C%23-net472-512BD4?style=flat-square&logo=csharp&logoColor=white) | Logique du mod |
-| ![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.5-2f855a?style=flat-square) | Chargement du plugin, logs et configuration |
-| ![Harmony](https://img.shields.io/badge/HarmonyX-2.9-7c3aed?style=flat-square) | Patches runtime sur le code du jeu |
-| ![Unity](https://img.shields.io/badge/Unity-Mono-000000?style=flat-square&logo=unity&logoColor=white) | Moteur du jeu ciblé |
+| Composant | Rôle | Version |
+| :--- | :--- | :---: |
+| `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.4.2 |
+| `ItemAdderLauncher.exe` | L'application Windows qui détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lance le jeu et gère les mises à jour. | 1.3.0 |
+
+Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInEx + Harmony) et ajoute ses données aux tableaux du jeu en mémoire. Aucun asset externe n'est nécessaire, les modèles 3D des nouveaux produits sont générés par code.
+
+> Mod non officiel, non affilié aux développeurs de Supermarket Together.
+
+## 🧭 Sommaire
+- [Fonctionnalités](#-fonctionnalités)
+- [Comment ça marche](#-comment-ça-marche)
+- [Installation & lancement](#-installation--lancement)
+- [Utilisation](#-utilisation)
+- [Configuration du mod](#-configuration-du-mod)
+- [Mises à jour](#-mises-à-jour)
+- [Dépannage](#-dépannage)
+- [Structure du projet](#-structure-du-projet)
+
+## ✨ Fonctionnalités
+
+### Le mod
+- ✅ **Rayon Tabac** : 44 produits vendables dans un nouveau groupe « Tabac » du carnet de commandes — cigarettes, tabac à rouler, tubes et filtres, vapes jetables et e-liquides, snus, tabac chauffé, cigares et articles pour fumeurs.
+- ✅ **Modèles 3D générés** : chaque produit a son maillage (coques biseautées, pièces tournées : paquet, blague, bouteille, vape, boîte métallique, cigare, briquet, cendrier, grinder, bourgeon), construit sommet par sommet au chargement — aucune primitive Unity, aucun fichier à installer.
+- ✅ **Palier d'arbre de compétences** : « Tabac I » apparaît juste après « Fruits de mer I », coûte 1 point de franchise et exige ce palier.
+- ✅ **Prix libres** : les produits tabac passent par la machine à prix comme les autres ; leur prix de base est prérempli.
+- ✅ **Sous-sol clandestin** : une salle sous le magasin avec 6 parcelles à cultiver, une trappe discrète dans la surface de vente côté rue, un rayon de vente à l'étage, un policier qui patrouille et des amendes — jouable en solo comme en multijoueur.
+- ✅ **Employés plus logiques** : un produit resté en réserve sans être posé sur une étagère est rangé par un employé de réassort sur l'étagère compatible la plus proche.
+- ✅ **Bouton « Sauvegarder et menu »** dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ».
+- ✅ **Multiplicateur de fonds** configurable, sans toucher au reste de l'économie.
+- ✅ **Raccourcis de confort** : F5 ajoute 50 points de franchise, F6 fixe les fonds à 2 milliards (hôte uniquement).
+- ✅ **Configuration sans recompilation** : chaque module peut être désactivé dans le fichier `.cfg` de BepInEx.
+- ✅ **Chargement optimisé** : prefabs, icônes et matériaux du rayon tabac sont générés une seule fois puis réutilisés entre les parties ; les temps sont tracés dans le log (`[Perf]`).
+
+### Le launcher
+- ✅ **Détection automatique** du dossier Steam (registre, `libraryfolders.vdf`, chemins classiques), avec sélection manuelle possible.
+- ✅ **Installation de BepInEx 5.4.23.5 x64** s'il est absent.
+- ✅ **Installation / mise à jour du mod** depuis la dernière release GitHub, ou depuis un DLL local.
+- ✅ **Cases à cocher « Modules au lancement »** : rayon tabac, sous-sol clandestin, réassort intelligent — écrites dans le `.cfg` du mod avant chaque lancement.
+- ✅ **Lancement en vanilla** pour une session sans BepInEx, sans rien désinstaller.
+- ✅ **Mise à jour du launcher lui-même**, proposée au démarrage avec confirmation.
+- ✅ **Journal d'activité** dans la fenêtre, et modes de diagnostic en ligne de commande.
+
+## 🔍 Comment ça marche
+
+### Chargement et patches
+Le mod est un plugin BepInEx 5 classique (`Plugin.cs`) : au démarrage du jeu, BepInEx charge `ItemAdder.dll`, Harmony applique les patches et le plugin crée deux objets persistants (`DontDestroyOnLoad`) : le gestionnaire du sous-sol et le bouton du menu Échap.
+
+Les patches Harmony servent uniquement à brancher le mod sur des points du jeu vanilla :
+
+| Patch | Cible | Rôle |
+| :--- | :--- | :--- |
+| `TobaccoPatches` | `ProductListing`, arbre de compétences, interface du magasin | Ajoute les 44 produits tabac, leur palier et rafraîchit l'interface |
+| `UndergroundPatches` / `UndergroundNetworkPatches` / `UndergroundSavePatches` | `ProductListing`, `GameData`, sauvegarde | Ajoute les 2 produits illicites, l'état réseau et la persistance |
+| `EmployeeRestockPatch` | `NPC_Manager.ReturnWeightedRestockerTask` | Confie un produit orphelin à un employé de réassort |
+| `GameDataPatch` | `GameData.Awake`, `CmdAlterFunds` | Journalise l'état de la partie et applique le multiplicateur de fonds |
+
+### Rayon tabac : données et modèles
+Les produits sont ajoutés **à la fin** des tableaux de `ProductListing` (`productsData`, prix joueur, inflation, paliers). Ils sont marqués par leur marque (`Kiosque`) : si une sauvegarde ou une synchronisation les contient déjà, le mod retrouve leurs indices au lieu de les dupliquer.
+
+Conséquences importantes :
+
+- les identifiants exacts dépendent du nombre de produits déjà présents dans ta version du jeu — le log en donne un exemple (`produits 339-382`), ne t'y fie pas dans un script ;
+- un joueur **sans le mod** ne connaît pas ces produits : il ne peut pas voir le rayon ni le commander ;
+- désactiver le rayon tabac sur une sauvegarde qui en contient déjà peut la rendre illisible (voir [Configuration](#-configuration-du-mod)).
+
+Les maillages sont construits dans `Products/ProductMeshes.cs` à partir de trois briques — `Slab` (coque biseautée), `Lathe` (pièce tournée) et `Blob` (bourgeon) — puis mis en cache par clé : un paquet, une bouteille ou un cigare n'est généré qu'une fois par session.
+
+### Sous-sol : construction, autorité réseau et sauvegarde
+Le sous-sol n'est pas une scène : il est assemblé **à partir des prefabs du magasin** (murs, sol, porte, étagère, caisse non incluse) sous le bâtiment, dans une salle de 18 × 16 avec 6 parcelles. Le mod repère un emplacement libre et une trappe dans la surface de vente, côté rue, à l'intérieur des limites du magasin.
+
+L'hôte est autoritaire : cultures, trappe, stock du rayon et amende sont décidés côté serveur, puis un état compact est envoyé aux clients (parcelles, bâche, ouverture de la trappe, stock). Chaque client construit le même décor localement pour garder la scène cohérente.
+
+L'état du sous-sol est enregistré séparément de la sauvegarde du jeu, dans :
+
+```text
+BepInEx\config\ItemAdder\underground_<nom de la sauvegarde>.txt
+```
+
+Ce fichier contient la version du format, l'état de la trappe et, pour chaque parcelle, son état, son heure de plantation, l'arrosage et la bâche. Il est relu au chargement de la partie.
+
+### Employés : réassort
+Le jeu vanilla ne demande aux employés de ranger que les produits **déjà affectés à une rangée d'étagère**. Un produit acheté puis stocké en réserve sans avoir été posé n'intéresse donc personne et les employés restent inactifs.
+
+Le patch intervient seulement quand l'employé n'a **aucune tâche vanilla** : il cherche le premier produit en réserve qui n'apparaît sur aucune étagère, réserve une rangée libre de l'étagère du bon type la plus proche et l'envoie la remplir. Le même mécanisme sert au rayon tabac et aux herbes du sous-sol.
+
+### Interface : menu Échap
+Le bouton « Sauvegarder et menu » est un clone du bouton « Oui » de la confirmation « Retour au menu principal » : son automate PlayMaker exécute déjà tout le flux du jeu (sauvegarde, fermeture du lobby, arrêt de l'hôte, retour au menu). Le mod le renomme et le replace entre « Sauvegarder et quitter » et « Retour ».
 
 ## 🚀 Installation & Lancement
 
 ### Prérequis
 - **Windows** et la version **Steam** de Supermarket Together.
-- **.NET SDK 8** (ou plus récent) avec le **targeting pack .NET Framework 4.7.2** pour compiler.
 - **BepInEx 5 x64** dans le dossier du jeu (le launcher l'installe automatiquement s'il est absent).
+- Pour compiler : **.NET SDK 8** (ou plus récent) avec le **targeting pack .NET Framework 4.7.2**.
 
 ### Launcher (recommandé)
 Le launcher est une **application Windows native** (C# WinForms), pas un script PowerShell. L'exécutable publié se trouve dans :
@@ -47,14 +117,30 @@ Le launcher est une **application Windows native** (C# WinForms), pas un script 
 dist\ItemAdderLauncher.exe
 ```
 
-Double-clique dessus. Le launcher :
+Double-clique dessus. La fenêtre se compose de haut en bas :
 
-- détecte le dossier Steam de Supermarket Together (registre Steam et `libraryfolders.vdf`), ou te laisse le choisir ;
-- affiche la version installée et la dernière release GitHub ;
-- installe **BepInEx 5.4.23.5 x64** s'il est absent ;
-- télécharge l'asset de la dernière release (`ItemAdder.dll`, `MonSupermarketMod.dll` ou archive ZIP) et l'installe dans `BepInEx\plugins\ItemAdder.dll` ;
-- remplace l'ancien `MonSupermarketMod.dll` pour éviter de charger deux versions du mod ;
-- permet de lancer le jeu avec le mod, de le lancer en **vanilla** (BepInEx désactivé pour cette session), d'ouvrir `BepInEx\plugins` et d'installer un DLL local pour réparer ou tester un build.
+| Élément | Rôle |
+| :--- | :--- |
+| **Dossier du jeu** + `Parcourir...` | Chemin de Supermarket Together ; détecté automatiquement, modifiable |
+| **État de l'installation** | Version du mod installé, fichier, dernière release GitHub, présence de BepInEx, badge « Prêt / Mise à jour / Erreur » |
+| **Installer / Mettre à jour** | Télécharge l'asset du mod depuis la dernière release (jeu fermé obligatoire) |
+| **Vérifier les mises à jour** | Recompare le mod installé et la dernière release |
+| **Installer un DLL local...** | Installe un build compilé, pour tester ou réparer |
+| **Lancer le jeu** | Applique les modules cochés puis démarre le jeu avec BepInEx |
+| **Lancer en vanilla** | Démarre le jeu avec `DOORSTOP_DISABLE=TRUE` : BepInEx et les plugins ne se chargent pas pour cette session |
+| **Ouvrir BepInEx** | Ouvre `BepInEx\plugins` dans l'Explorateur |
+| **Modules au lancement** | Cases à cocher « Rayon Tabac », « Sous-sol clandestin », « Réassort intelligent » |
+| **Journal** | Toutes les opérations, les versions, les erreurs réseau et les chemins utilisés |
+
+Les modules cochés sont écrits dans le `.cfg` **au moment du clic sur « Lancer le jeu »**, pas avant : tu peux donc tester une configuration sans toucher au fichier. Les choix sont aussi mémorisés dans :
+
+```text
+%APPDATA%\ItemAdderLauncher\settings.json
+```
+
+Ce fichier contient le chemin du jeu et les trois booléens des modules. Si aucune préférence n'existe encore, le launcher reprend les valeurs déjà présentes dans le `.cfg`.
+
+L'écriture dans le `.cfg` est chirurgicale : seules les clés concernées changent, les commentaires BepInEx et les autres réglages (amende, durée de pousse, multiplicateur) sont conservés. Le lancement vanilla ne modifie ni le `.cfg` ni les modules.
 
 Pour générer l'exécutable depuis les sources :
 
@@ -64,9 +150,20 @@ dotnet publish ItemAdderLauncher/ItemAdderLauncher.csproj -c Release -r win-x64 
 
 L'exécutable publié est autonome : le **.NET Desktop Runtime n'est pas requis** sur le PC cible.
 
-Pour publier une mise à jour, crée une release GitHub avec un tag `vX.Y.Z` et joins un asset `ItemAdder.dll` ou une archive ZIP contenant `ItemAdder.dll`/`MonSupermarketMod.dll`. Le launcher sélectionne automatiquement cet asset. En l'absence de release, le bouton **« Installer un DLL local... »** permet d'installer le build compilé.
+#### Modes de diagnostic
+Le launcher accepte des arguments de ligne de commande, utiles quand quelque chose ne se détecte pas :
 
-### 1. Installer BepInEx manuellement
+| Commande | Effet |
+| :--- | :--- |
+| `ItemAdderLauncher.exe --diagnose` | Écrit `launcher-diagnose.txt` : chemin du jeu, validité de l'exe, version du mod installé, BepInEx, dernière release |
+| `ItemAdderLauncher.exe --selftest [dll]` | Installe un DLL dans un faux dossier de jeu temporaire et vérifie la copie, la suppression de l'ancien DLL et la comparaison de versions → `launcher-selftest.txt` |
+| `ItemAdderLauncher.exe --bepinextest` | Télécharge et extrait BepInEx dans un dossier temporaire pour valider le réseau et l'archive → `launcher-bepinextest.txt` |
+
+Les rapports sont écrits dans le dossier courant du launcher.
+
+### Installation manuelle
+
+#### 1. Installer BepInEx
 Le script fourni télécharge BepInEx **5.4.23.5 x64** et l'extrait dans le dossier du jeu. Il ne fait rien si BepInEx est déjà présent.
 
 ```powershell
@@ -77,13 +174,13 @@ Sans `-GamePath`, le script utilise `E:\SteamLibrary\steamapps\common\Supermarke
 
 Installation manuelle possible : télécharge `BepInEx_win_x64_5.4.23.5.zip` depuis les releases BepInEx et extrais son contenu à la racine du jeu (à côté de `Supermarket Together.exe`).
 
-### 2. Cloner le projet
+#### 2. Cloner le projet
 ```bash
 git clone https://github.com/BlackAngelTVdev/BasedMod.git
 cd BasedMod
 ```
 
-### 3. Configurer le chemin du jeu
+#### 3. Configurer le chemin du jeu
 Ouvre `ItemAdder/ItemAdder.csproj` et adapte la propriété `GameDir` :
 
 ```xml
@@ -92,64 +189,75 @@ Ouvre `ItemAdder/ItemAdder.csproj` et adapte la propriété `GameDir` :
 
 Les DLL de référence (`BepInEx.dll`, `0Harmony.dll`, `Assembly-CSharp.dll`, `Unity.TextMeshPro.dll`, `Rewired_Core.dll`, etc.) sont lues depuis ce dossier.
 
-### 4. Compiler et installer le plugin
+#### 4. Compiler et installer le plugin
 ```bash
 cd ItemAdder
 dotnet build -c Release
 ```
 
-La cible post-build copie automatiquement `ItemAdder.dll` dans :
+La cible post-build copie automatiquement `ItemAdder.dll` dans `[GameDir]\BepInEx\plugins\ItemAdder.dll` et supprime l'ancien `MonSupermarketMod.dll` pour éviter de charger deux versions.
 
-```
-[GameDir]\BepInEx\plugins\ItemAdder.dll
-```
+Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.dll` dans `BepInEx\plugins\`.
 
-Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.dll` dans `BepInEx\plugins\`. Le build supprime aussi l'ancien `MonSupermarketMod.dll` pour éviter de charger deux versions.
-
-### 5. Lancer le jeu
+#### 5. Lancer le jeu
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Au démarrage, puis au chargement d'une partie Classic, tu dois y voir :
 
-```
+```text
 ItemAdder v1.4.2 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
+[Interface] Bouton « Sauvegarder et menu » ajouté au menu Échap.
 [Souterrain] Produits illicites ajoutés : Herbe classique (id 383) et Herbe premium (id 384).
+[Souterrain] Sous-sol construit sous le magasin : trappe (5.1, 27.0), salle 18x16, 6 parcelles.
 [Souterrain] Sous-sol prêt.
+[Souterrain] Étagère à herbes placée à l'étage en (10.8, -4.2, 21.3).
+[Souterrain] Policier spawn (netId 33).
 ```
+
+Les identifiants de produits et de palier peuvent varier selon la version du jeu : ce sont les libellés qui comptent.
 
 ## 📖 Utilisation
-Au premier lancement, BepInEx crée le fichier :
 
-```
+### Configuration du mod
+Au premier lancement, BepInEx crée :
+
+```text
 BepInEx\config\com.username.supermarkettogethermod.cfg
 ```
 
-Modifie les valeurs puis relance le jeu (la configuration est lue au démarrage) :
+Le plus simple est de cocher ou décocher les trois modules dans le launcher. Pour les valeurs fines, modifie le fichier puis relance le jeu (la configuration est lue au démarrage) :
 
 ```ini
+[Général]
+MultiplicateurDeFonds = 1
+
 [Tabac]
 ActiverRayonTabac = true
 
 [Employés]
 ReassortIntelligent = true
 
-[Général]
-MultiplicateurDeFonds = 1
+[Souterrain]
+ActiverSousSol = true
+AmendeRaid = 5000
+DureePousseHeures = 8
+ChanceRaidParInspection = 0.35
 ```
 
 | Clé | Section | Défaut | Effet |
 | :--- | :--- | :---: | :--- |
-| `ActiverRayonTabac` | `Tabac` | `true` | Ajoute (ou non) le rayon tabac et son palier d'arbre de compétences |
-| `ReassortIntelligent` | `Employés` | `true` | Les employés de réassort rangent les produits en réserve qui ne sont sur aucune étagère, sur l'étagère compatible la plus proche |
-| `MultiplicateurDeFonds` | `Général` | `1` | Multiplie les fonds ajoutés/retirés (`1` = vanilla) |
+| `MultiplicateurDeFonds` | `Général` | `1` | Multiplie les fonds ajoutés/retirés via `GameData.CmdAlterFunds` (`1` = vanilla) |
+| `ActiverRayonTabac` | `Tabac` | `true` | Ajoute le rayon tabac, ses 44 produits et le palier « Tabac I » |
+| `ReassortIntelligent` | `Employés` | `true` | Les employés rangent les produits en réserve absents de toutes les étagères |
+| `ActiverSousSol` | `Souterrain` | `true` | Construit le sous-sol, ses parcelles, son rayon et son policier |
+| `AmendeRaid` | `Souterrain` | `5000` | Montant retiré des fonds lors d'un raid réussi |
+| `DureePousseHeures` | `Souterrain` | `8` | Heures de jeu nécessaires pour qu'une parcelle arrosée arrive à maturité |
+| `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection se transforme en descente |
 
-### Employés et réassort
-Le jeu ne demande aux employés de ranger que les produits déjà affectés à une rangée d'étagère : un produit rapporté du carnet de commandes puis stocké en réserve sans avoir été posé n'intéresse personne et les employés restent inactifs.
+> ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` ou `ActiverSousSol` après avoir utilisé ces contenus dans une sauvegarde peut la rendre illisible : garde les options actives pour les parties concernées.
 
-Avec `ReassortIntelligent`, dès qu'un employé de réassort n'a plus rien à faire, il prend le premier produit en réserve qui n'apparaît sur aucune étagère, réserve une rangée libre d'une étagère du bon type — la plus proche de lui — puis va la remplir. Le même mécanisme sert pour les produits du rayon Tabac et pour les herbes du sous-sol.
-
-### Utiliser le rayon tabac
+### Rayon tabac
 1. Débloque d'abord **Fruits de mer I** dans l'arbre de compétences.
-2. Achète le nœud **Tabac I** (1 point de franchise), placé à côté du nœud Fruits de mer I.
+2. Achète le nœud **Tabac I** (1 point de franchise, clic sur le nœud), placé à côté du nœud Fruits de mer I.
 3. Le groupe **Tabac** apparaît dans le carnet de commandes. Commande les produits, place-les en rayon et vends-les.
 4. Les prix se règlent sur la machine à prix comme pour les autres produits.
 
@@ -161,34 +269,54 @@ Le catalogue couvre :
 - **Cigares** : cigares, cigare premium, cigarillos vanille, cave à cigares et humidificateur.
 - **Accessoires** : briquets, zippo, briquet tempête, cendriers, grinder, filtres, étui à cigarettes et porte-cigarette.
 
-### Sous-sol clandestin (layout Classic)
-Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît **dans la surface de vente, côté rue et sur la droite** (le mod repère la rue grâce aux points d'apparition des clients), toujours à l'intérieur des limites du magasin et sur un sol libre : **E** dessus ouvre/ferme l'accès, et marcher sur la trappe ouverte fait descendre au sous-sol. Si la trappe te pose problème (obstacle, passage gêné), déplace simplement le meuble qui la bloquait ou signale-le : le mod cherche un autre emplacement libre au chargement suivant.
+### Sous-sol clandestin
 
-- **Cultiver** : approche une parcelle et appuie sur **E** pour planter (graine payante), arroser puis récolter. **F** bâche/débâche une parcelle pour la cacher.
-- **Vendre** : la récolte part dans un rayon à herbes placé **à l'étage**, juste à côté d'un rayon déjà posé par le joueur (jamais dans la réserve). Le jeu sauvegardant les meubles, la copie restaurée au chargement est retirée et son stock transféré sur le rayon recréé au bon endroit. Les clients le prennent et paient aux caisses normales ; aucune caisse n'est construite au sous-sol. Le rayon n'apparaît dans la demande des clients que s'il contient réellement du stock, pour éviter qu'ils cherchent une herbe absente ; si une variété s'épuise en cours de journée, elle est aussi retirée des listes de courses déjà en cours, donc personne ne repart chercher une herbe qui n'est plus là.
-- **Police** : un agent patrouille dans le magasin. Régulièrement, il inspecte les lieux ; si la trappe est ouverte et qu'il reste des plants visibles ou du stock au rayon, il peut descendre. S'il trouve quelque chose : **amende de 5 000 $** et saisie des plants et du stock. Ferme la trappe et bâche les plants avant sa descente pour éviter l'amende.
+#### Accès
+Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît dans la surface de vente, côté rue et sur la droite (le mod repère la rue grâce aux points d'apparition des clients), toujours à l'intérieur des limites du magasin et sur un sol libre.
 
-| Clé | Section | Défaut | Effet |
-| :--- | :--- | :---: | :--- |
-| `ActiverSousSol` | `Souterrain` | `true` | Construit (ou non) le sous-sol clandestin |
-| `AmendeRaid` | `Souterrain` | `5000` | Montant de l'amende en cas de raid réussi |
-| `DureePousseHeures` | `Souterrain` | `8` | Heures de jeu pour arriver à maturité (si arrosé) |
-| `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection déclenche une descente |
+- **E** sur la trappe : ouvrir / fermer.
+- Marcher sur la trappe **ouverte** : descendre.
+- La trappe est aussi un lien de navigation : la police peut l'emprunter quand elle est ouverte.
 
-#### Jouer en multijoueur
-Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cultures, la trappe, le stock du rayon et l'amende, et chaque client construit le même décor localement.
+Si la trappe gêne un passage ou se retrouve contre un meuble, déplace le meuble : le mod cherche un autre emplacement libre au chargement suivant.
 
-1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.2) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
-2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
-3. Dans le log de l'hôte, vérifie : `[Souterrain] Sous-sol prêt.`, `[Souterrain] Étagère à herbes placée à l'étage`, `[Souterrain] Policier spawn`.
-4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : la trappe, les parcelles, les bâches et le stock du rayon sont alors pilotés par l'hôte.
+#### Culture
+Six parcelles, chacune avec son pot et son étiquette d'état.
 
-Chaque joueur peut planter, arroser, bâcher et récolter ; l'action est envoyée à l'hôte, qui applique le résultat et renvoie l'état. Le joueur qui agit reçoit aussi ses propres messages (graine achetée, parcelle arrosée, etc.).
+| | Graine | Prix de base du produit | Récolte |
+| :--- | :---: | :---: | :---: |
+| Herbe classique | 350 $ | 85 $ | 8 unités |
+| Herbe premium | 700 $ | 190 $ | 6 unités |
 
-> Un joueur **sans le mod** ne verra ni la trappe ni le sous-sol. Ne mélange pas les versions : le jeu peut se désynchroniser si les tableaux de produits ou le nombre de parcelles diffèrent. L'hôte **et les clients** doivent garder `ActiverSousSol = true`.
+- **E** sur une parcelle vide : planter (la graine est débitée des fonds).
+- **E** sur une parcelle plantée non arrosée : arroser. Sans arrosage, la pousse plafonne à **50 %**.
+- La pousse suit les heures de jeu : `DureePousseHeures` (8 h par défaut) après la plantation si la parcelle est arrosée.
+- **E** sur une parcelle prête : récolter. La récolte part **directement dans le rayon à herbes de l'étage** ; si le rayon est plein, le message te demande de vendre avant de récolter.
+- **F** sur une parcelle plantée : bâcher / débâcher. Une parcelle bâchée cache sa plante (utile pendant une inspection).
+
+#### Vente à l'étage
+Le rayon à herbes est posé **à l'étage**, à côté d'un rayon déjà installé par le joueur (jamais dans la réserve). Aucune caisse n'est construite au sous-sol : les clients paient aux caisses normales du magasin.
+
+Le rayon n'apparaît dans la demande des clients **que s'il contient réellement du stock** ; si une variété s'épuise en cours de journée, elle est retirée des listes de courses en cours, donc personne ne repart chercher une herbe absente. Le jeu sauvegardant les meubles, une copie du rayon restaurée au chargement est supprimée et son stock transféré sur le rayon recréé au bon endroit.
+
+#### Police et amendes
+Un agent patrouille dans le magasin. Il effectue des inspections :
+
+- la première a lieu **75 à 150 secondes** après le chargement, puis toutes les **110 à 220 secondes** ;
+- une inspection ne peut déboucher sur une descente que si le magasin est **ouvert** et qu'il est entre **8 h et 22 h** ;
+- il faut en plus que la **trappe soit ouverte** et qu'il reste soit une **plante non bâchée**, soit du **stock au rayon à herbes** ;
+- la probabilité de descente est alors `ChanceRaidParInspection` (35 % par défaut).
+
+Déroulé d'un raid :
+
+1. message d'alerte, le policier se dirige vers la trappe ;
+2. **s'il la trouve fermée, il abandonne** — c'est le moment de refermer derrière toi ;
+3. il descend, fouille la salle et, s'il reste une plante visible ou du stock au rayon, applique l'amende (`AmendeRaid`, 5 000 $ par défaut), **vide toutes les parcelles et le stock du rayon**, puis remonte.
+
+Une fois en bas, fermer la trappe ne cache plus rien : bâche les plants et vide le rayon avant sa descente.
 
 ### Menu Échap
-Un bouton **Sauvegarder et menu** est ajouté dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ». Il sauvegarde la partie puis revient au menu principal, sans quitter le jeu.
+Un bouton **« Sauvegarder et menu »** est ajouté dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ». Il sauvegarde la partie puis revient au menu principal, sans quitter le jeu.
 
 ### Raccourcis F5 / F6
 En solo ou en tant qu'hôte :
@@ -198,7 +326,69 @@ En solo ou en tant qu'hôte :
 
 En multijoueur client, les raccourcis sont ignorés : les points et les fonds doivent être modifiés par l'hôte.
 
-> ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` après avoir utilisé le rayon tabac dans une sauvegarde peut rendre cette sauvegarde illisible : garde l'option active pour les parties concernées.
+### Multijoueur
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.2) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
+3. Dans le log de l'hôte, vérifie `[Souterrain] Sous-sol prêt.` et `[Souterrain] Policier spawn`.
+4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : trappe, parcelles, bâches et stock sont pilotés par l'hôte.
+
+Chaque joueur peut planter, arroser, bâcher et récolter ; l'action est envoyée à l'hôte, qui applique le résultat et renvoie l'état. Le joueur qui agit reçoit aussi ses propres messages. La police, l'amende et l'épuisement du stock sont décidés côté hôte.
+
+> Un joueur **sans le mod** ne verra ni la trappe ni le sous-sol. Ne mélange pas les versions : le jeu peut se désynchroniser si les tableaux de produits ou le nombre de parcelles diffèrent. L'hôte **et les clients** doivent garder `ActiverSousSol = true`.
+
+## 🔄 Mises à jour
+
+Le launcher interroge l'API GitHub à chaque démarrage :
+
+```text
+GET https://api.github.com/repos/BlackAngelTVdev/BasedMod/releases/latest
+```
+
+Seule la **dernière release publiée** est prise en compte : un brouillon ou une pre-release n'est pas renvoyé par cet endpoint. Une requête par démarrage ; en cas d'abus, GitHub répond « limite de requêtes atteinte » (60 requêtes/heure par IP sans authentification) et le launcher affiche cet état sans bloquer le reste.
+
+### Mise à jour du mod
+1. Le launcher récupère le tag (ex. `v1.4.3`) et les assets de la release.
+2. Il choisit l'asset : `ItemAdder.dll` en priorité, sinon `MonSupermarketMod.dll`, sinon la première archive `.zip`.
+3. Il télécharge dans `%TEMP%`, extrait l'archive si besoin et cherche `ItemAdder.dll`.
+4. Il copie le DLL dans `BepInEx\plugins\ItemAdder.dll` via un fichier `.new` renommé (jamais de DLL à moitié écrit), puis supprime l'ancien `MonSupermarketMod.dll`.
+5. Il compare la version du DLL installé (lue dans ses métadonnées, donc `<Version>` dans `ItemAdder.csproj`) au numéro du tag. Badge **Prêt** ou **Mise à jour**.
+
+L'installation du mod exige que le jeu soit **fermé** ; le launcher refuse sinon. Sans release disponible, **« Installer un DLL local... »** reste utilisable.
+
+### Mise à jour du launcher
+Le launcher se met à jour depuis la même release, via un asset dédié :
+
+1. il cherche un asset dont le nom commence par `ItemAdderLauncher` et finit par `.exe` ;
+2. il lit sa version **dans le nom du fichier** (`ItemAdderLauncher-v1.4.0.exe` → 1.4.0), ce qui évite de télécharger l'exécutable pour rien ;
+3. si cette version est plus récente que la sienne, une fenêtre propose de télécharger et redémarrer — jamais de remplacement silencieux ;
+4. s'il accepte : téléchargement dans `%TEMP%`, relecture de la version **dans le fichier téléchargé** (garde-fou), vérification que le dossier du launcher est accessible en écriture, puis un script `cmd` attend la fermeture du launcher, remplace l'exécutable (60 tentatives à 1 s d'intervalle), redémarre et nettoie le temporaire.
+
+Un asset nommé simplement `ItemAdderLauncher.exe` est ignoré pour la vérification et signalé dans le journal. Si le launcher est installé dans un dossier protégé (`Program Files` sans droits), la mise à jour est refusée avec un message explicite avant tout téléchargement.
+
+### Publier une release
+1. Incrémente les versions : `<Version>` dans `ItemAdder/ItemAdder.csproj` (mod) et `ItemAdderLauncher/ItemAdderLauncher.csproj` (launcher).
+2. Compile les deux (`dotnet publish` pour le launcher, voir plus haut).
+3. Crée une **release GitHub** marquée « latest », taguée `vX.Y.Z` avec le numéro du **mod**, et joins deux assets :
+   - `ItemAdder.dll` (ou une archive ZIP contenant `ItemAdder.dll` / `MonSupermarketMod.dll`) ;
+   - `ItemAdderLauncher-vX.Y.Z.exe` — la version du **launcher** doit rester dans le nom du fichier.
+
+Le tag porte la version du mod, le nom du fichier exécutable porte la version du launcher : les deux numérotations sont indépendantes et c'est normal.
+
+## 🧯 Dépannage
+
+| Symptôme | Cause probable | Solution |
+| :--- | :--- | :--- |
+| Le launcher ne trouve pas le jeu | Installation hors des chemins Steam habituels | `Parcourir...` et choisis le dossier qui contient `Supermarket Together.exe` |
+| « Aucune release GitHub n'est publiée » | Pas de release marquée « latest » | Crée une release avec l'asset `ItemAdder.dll`, ou utilise « Installer un DLL local... » |
+| « Ferme Supermarket Together avant d'installer » | Le jeu tourne encore | Ferme le jeu (le DLL est verrouillé par le processus) |
+| Badge « Prêt » alors que tu viens de publier | `<Version>` du DLL non incrémentée | Incrémente la version, recompile, republie l'asset |
+| Pas de sous-sol | `ActiverSousSol = false` ou layout non-Classic | Coche le module dans le launcher, charge une partie Classic |
+| La trappe gêne le passage | Meuble posé dessus après coup | Déplace le meuble ; le mod cherche un autre emplacement au chargement suivant |
+| « Aucune étagère constructible trouvée » | Aucune étagère compatible disponible pour recevoir le rayon à herbes | Pose ou débloque une étagère du magasin, puis recharge la partie |
+| Amende alors que la trappe était fermée | La police était déjà descendue | Referme la trappe **avant** son arrivée, bâche les plants, vide le rayon |
+| Le launcher se ferme pendant la mise à jour | Dossier non accessible en écriture | Déplace l'exécutable dans un dossier utilisateur |
+| `Steamworks is not initialized` dans le log | Le jeu est lancé sans Steam (ou Steam hors ligne) | Lance le jeu depuis Steam ; le mod n'est pas concerné |
+| `BoxCollider does not support negative scale` | Avertissement interne du jeu sur ses portes | Sans effet sur le mod |
 
 ## 🗂 Structure du projet
 ```text
@@ -215,6 +405,8 @@ BasedMod/
 │   │   ├── GameLocator.cs
 │   │   ├── GitHubService.cs
 │   │   ├── ModService.cs
+│   │   ├── ModConfig.cs
+│   │   ├── LauncherUpdater.cs
 │   │   ├── Models.cs
 │   │   ├── VersionHelper.cs
 │   │   └── LauncherSettings.cs
@@ -227,16 +419,23 @@ BasedMod/
     ├── Plugin.cs
     ├── Patches/
     │   ├── GameDataPatch.cs
-    │   └── TobaccoPatches.cs
+    │   ├── TobaccoPatches.cs
+    │   └── EmployeeRestockPatch.cs
+    ├── Products/
+    │   └── ProductMeshes.cs
     ├── Tobacco/
     │   ├── TobaccoManager.cs
     │   └── TobaccoSkillNode.cs
+    ├── UI/
+    │   └── EscapeMenuSaveButton.cs
     ├── Underground/
     │   ├── UndergroundManager.cs
     │   ├── UndergroundBasement.cs
     │   ├── UndergroundCatalog.cs
     │   ├── UndergroundNetwork.cs
+    │   ├── UndergroundNetworkPatches.cs
     │   ├── UndergroundPatches.cs
+    │   ├── UndergroundSavePatches.cs
     │   ├── BasementDoor.cs
     │   ├── CannabisPlot.cs
     │   └── PoliceVisual.cs
