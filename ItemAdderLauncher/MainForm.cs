@@ -11,7 +11,7 @@ public sealed class MainForm : Form
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
     private const int NormalWidth = 710;
-    private const int NormalHeight = 574;
+    private const int NormalHeight = 640;
 
     private readonly GitHubService _gitHub = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -35,12 +35,17 @@ public sealed class MainForm : Form
     private readonly RoundedButton _openFolderButton;
     private readonly RoundedButton _releasesButton;
     private readonly RoundedButton _maximizeButton;
+    private readonly CheckBox _tobaccoCheck;
+    private readonly CheckBox _undergroundCheck;
+    private readonly CheckBox _restockCheck;
     private readonly Label _appTitle;
     private readonly RoundedPanel _versionBadge;
     private readonly Panel _titleBar;
     private readonly ToolTip _toolTip = new();
 
     private bool _busy;
+    private bool _suppressModuleEvents;
+    private bool _launcherUpdateChecked;
     private InstalledMod? _installedMod;
     private ReleaseInfo? _latestRelease;
 
@@ -85,7 +90,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             BackColor = Theme.Background,
             ColumnCount = 1,
-            RowCount = 6,
+            RowCount = 7,
             Margin = Padding.Empty,
             Padding = new Padding(20, 6, 20, 10)
         };
@@ -93,6 +98,7 @@ public sealed class MainForm : Form
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         content.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
@@ -123,10 +129,17 @@ public sealed class MainForm : Form
         actions.Margin = new Padding(0, 0, 0, 8);
         content.Controls.Add(actions, 0, 3);
 
-        RoundedPanel journal = BuildJournal(out _logBox, out _clearLogButton);
-        content.Controls.Add(journal, 0, 4);
+        RoundedPanel modules = BuildModulesCard(
+            out _tobaccoCheck,
+            out _undergroundCheck,
+            out _restockCheck);
+        modules.Margin = new Padding(0, 0, 0, 8);
+        content.Controls.Add(modules, 0, 4);
 
-        content.Controls.Add(BuildFooter(), 0, 5);
+        RoundedPanel journal = BuildJournal(out _logBox, out _clearLogButton);
+        content.Controls.Add(journal, 0, 5);
+
+        content.Controls.Add(BuildFooter(), 0, 6);
         root.Controls.Add(content, 0, 1);
         Controls.Add(root);
 
@@ -140,6 +153,9 @@ public sealed class MainForm : Form
         _releasesButton.Click += (_, _) => OpenUrl(GitHubService.ReleasesUrl);
         _clearLogButton.Click += (_, _) => _logBox.Clear();
         _maximizeButton.Click += (_, _) => ToggleMaximize();
+        _tobaccoCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
+        _undergroundCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
+        _restockCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
 
         _toolTip.SetToolTip(_browseButton, "Choisir le dossier qui contient Supermarket Together.exe");
         _toolTip.SetToolTip(_localDllButton, "Installer ou réparer le mod depuis un DLL déjà compilé");
@@ -147,6 +163,18 @@ public sealed class MainForm : Form
         _toolTip.SetToolTip(_vanillaButton, "Lancer le jeu sans BepInEx ni ItemAdder");
         _toolTip.SetToolTip(_openFolderButton, "Ouvrir BepInEx\\plugins dans l'Explorateur");
         _toolTip.SetToolTip(_stateBadge, "État actuel de l'installation");
+        _toolTip.SetToolTip(
+            _tobaccoCheck,
+            "Coche pour lancer avec le rayon tabac et son palier de compétences. " +
+            "Garde-la cochée sur une sauvegarde qui contient déjà des produits tabac.");
+        _toolTip.SetToolTip(
+            _undergroundCheck,
+            "Coche pour lancer avec le sous-sol clandestin (culture, police, raids). " +
+            "Tous les joueurs doivent avoir le même réglage.");
+        _toolTip.SetToolTip(
+            _restockCheck,
+            "Les employés de réassort rangent les produits restés en réserve " +
+            "sur l'étagère compatible la plus proche.");
 
         LoadSavedGamePath();
         Shown += MainForm_Shown;
@@ -759,6 +787,84 @@ public sealed class MainForm : Form
         return actions;
     }
 
+    private static RoundedPanel BuildModulesCard(
+        out CheckBox tobacco,
+        out CheckBox undergroundToCheck,
+        out CheckBox restock)
+    {
+        var card = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 10
+        };
+
+        var gear = new Label
+        {
+            Text = "\uE713",
+            Font = Theme.Icon(9f),
+            ForeColor = Theme.Accent,
+            AutoSize = false,
+            Location = new Point(14, 8),
+            Size = new Size(18, 18),
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        card.Controls.Add(gear);
+
+        var heading = new Label
+        {
+            Text = "MODULES AU LANCEMENT",
+            AutoSize = false,
+            Font = Theme.Ui(8f, FontStyle.Bold),
+            ForeColor = Theme.Accent,
+            Location = new Point(34, 8),
+            Size = new Size(260, 18)
+        };
+        card.Controls.Add(heading);
+
+        var hint = new Label
+        {
+            Text = "Appliqué au prochain lancement",
+            AutoSize = false,
+            Font = Theme.Ui(7.5f),
+            ForeColor = Theme.TextFaint,
+            TextAlign = ContentAlignment.MiddleRight,
+            Location = new Point(400, 8),
+            Size = new Size(256, 18),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        card.Controls.Add(hint);
+        hint.BringToFront();
+
+        tobacco = CreateModuleCheckBox("Rayon Tabac", 34);
+        undergroundToCheck = CreateModuleCheckBox("Sous-sol clandestin", 214);
+        restock = CreateModuleCheckBox("Réassort intelligent", 360);
+
+        card.Controls.Add(tobacco);
+        card.Controls.Add(undergroundToCheck);
+        card.Controls.Add(restock);
+
+        return card;
+    }
+
+    private static CheckBox CreateModuleCheckBox(string text, int left)
+    {
+        return new CheckBox
+        {
+            Text = text,
+            AutoSize = true,
+            Location = new Point(left, 34),
+            BackColor = Theme.Surface,
+            ForeColor = Theme.Text,
+            Font = Theme.Ui(8.5f),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand,
+            Checked = true
+        };
+    }
+
     private static RoundedPanel BuildJournal(out TextBox logBox, out RoundedButton clearButton)
     {
         var card = new RoundedPanel
@@ -981,6 +1087,29 @@ public sealed class MainForm : Form
         LauncherSettings settings = SettingsStore.Load();
         string? detected = GameLocator.FindGamePath(settings.GamePath);
         _pathInput.Value = detected ?? settings.GamePath ?? string.Empty;
+
+        (bool Tobacco, bool Underground, bool Restock) fromConfig = detected is null
+            ? (true, true, true)
+            : ModConfig.Read(detected);
+
+        _suppressModuleEvents = true;
+        _tobaccoCheck.Checked = settings.Tobacco ?? fromConfig.Tobacco;
+        _undergroundCheck.Checked = settings.Underground ?? fromConfig.Underground;
+        _restockCheck.Checked = settings.Restock ?? fromConfig.Restock;
+        _suppressModuleEvents = false;
+    }
+
+    private void ModuleCheckBox_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (_suppressModuleEvents)
+        {
+            return;
+        }
+
+        SettingsStore.SaveModules(
+            _tobaccoCheck.Checked,
+            _undergroundCheck.Checked,
+            _restockCheck.Checked);
     }
 
     private async void MainForm_Shown(object? sender, EventArgs e)
@@ -1078,6 +1207,11 @@ public sealed class MainForm : Form
                 return;
             }
 
+            if (!withoutMods)
+            {
+                ApplyModuleSettings(gamePath);
+            }
+
             GameLocator.LaunchGame(gamePath, withoutMods);
             Log(withoutMods
                 ? "Lancement de Supermarket Together en vanilla (BepInEx désactivé)..."
@@ -1086,6 +1220,26 @@ public sealed class MainForm : Form
         catch (Exception ex)
         {
             ShowError(ex.Message);
+        }
+    }
+
+    private void ApplyModuleSettings(string gamePath)
+    {
+        bool tobacco = _tobaccoCheck.Checked;
+        bool underground = _undergroundCheck.Checked;
+        bool restock = _restockCheck.Checked;
+        SettingsStore.SaveModules(tobacco, underground, restock);
+
+        try
+        {
+            ModConfig.Apply(gamePath, tobacco, underground, restock);
+            Log($"Modules : tabac {(tobacco ? "activé" : "désactivé")}, " +
+                $"sous-sol {(underground ? "activé" : "désactivé")}, " +
+                $"réassort intelligent {(restock ? "activé" : "désactivé")}.");
+        }
+        catch (Exception ex)
+        {
+            Log("Configuration du mod non enregistrée : " + ex.Message);
         }
     }
 
@@ -1179,7 +1333,7 @@ public sealed class MainForm : Form
         }
 
         _pathInput.Value = gamePath;
-        SettingsStore.Save(new LauncherSettings { GamePath = gamePath });
+        SettingsStore.SaveGamePath(gamePath);
 
         _installedMod = ModService.GetInstalledMod(gamePath);
         _installedValue.Text = _installedMod?.Version ?? "aucune";
@@ -1231,6 +1385,79 @@ public sealed class MainForm : Form
 
         UpdateLatestValue();
         UpdateInstallationState();
+
+        await CheckLauncherUpdateAsync();
+    }
+
+    private async Task CheckLauncherUpdateAsync()
+    {
+        if (_launcherUpdateChecked || _latestRelease is null || IsDisposed)
+        {
+            return;
+        }
+
+        _launcherUpdateChecked = true;
+
+        ReleaseAsset? asset = _latestRelease.SelectLauncherAsset();
+        if (asset is null)
+        {
+            Log("Launcher : aucun asset ItemAdderLauncher*.exe dans la release, pas de mise à jour proposée.");
+            return;
+        }
+
+        Version current = LauncherUpdater.CurrentVersion;
+        Version? remote = LauncherUpdater.GetAssetVersion(asset);
+
+        if (remote is null)
+        {
+            Log($"Launcher : la version n'est pas dans le nom de l'asset " +
+                $"({asset.Name}). Renomme l'exécutable {LauncherUpdater.AssetPrefix}-v{current}.exe " +
+                "avant de l'ajouter à la release pour activer la vérification.");
+            return;
+        }
+
+        if (remote <= current)
+        {
+            Log($"Launcher à jour (v{current}).");
+            return;
+        }
+
+        DialogResult answer = MessageBox.Show(
+            this,
+            $"Une nouvelle version du launcher est disponible : v{remote} " +
+            $"(actuelle : v{current}).\n\nTélécharger et redémarrer maintenant ?",
+            "Mise à jour du launcher",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+        {
+            Log($"Mise à jour du launcher v{remote} ignorée.");
+            return;
+        }
+
+        if (!LauncherUpdater.CanReplaceExecutable(out string reason))
+        {
+            throw new InvalidOperationException(reason);
+        }
+
+        SetState("Mise à jour", Theme.Blue);
+        string downloaded = await LauncherUpdater.DownloadAsync(
+            asset,
+            new Progress<string>(Log),
+            _lifetime.Token);
+
+        Version? downloadedVersion = LauncherUpdater.ReadExecutableVersion(downloaded);
+        if (downloadedVersion is not null && downloadedVersion <= current)
+        {
+            Log($"Le fichier téléchargé est en v{downloadedVersion} : mise à jour annulée.");
+            return;
+        }
+
+        Log($"Installation du launcher v{downloadedVersion?.ToString() ?? remote.ToString()} " +
+            "et redémarrage...");
+        LauncherUpdater.ScheduleReplaceAndRestart(downloaded);
+        Close();
     }
 
     private void UpdateLatestValue()
@@ -1317,7 +1544,7 @@ public sealed class MainForm : Form
         }
 
         _pathInput.Value = gamePath;
-        SettingsStore.Save(new LauncherSettings { GamePath = gamePath });
+        SettingsStore.SaveGamePath(gamePath);
         return gamePath;
     }
 
@@ -1463,7 +1690,7 @@ public sealed class MainForm : Form
     {
         Version? version = typeof(MainForm).Assembly.GetName().Version;
         return version is null
-            ? "v1.2.0"
+            ? "v1.3.0"
             : $"v{version.Major}.{version.Minor}.{version.Build}";
     }
 

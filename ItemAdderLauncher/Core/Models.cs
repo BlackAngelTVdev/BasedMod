@@ -27,6 +27,13 @@ public sealed class ReleaseInfo
 
         return Assets.FirstOrDefault(a => a.IsZip);
     }
+
+    public ReleaseAsset? SelectLauncherAsset()
+    {
+        return Assets.FirstOrDefault(a =>
+            a.Name.StartsWith(LauncherUpdater.AssetPrefix, StringComparison.OrdinalIgnoreCase) &&
+            a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 public sealed class InstalledMod

@@ -5,6 +5,13 @@ namespace ItemAdderLauncher.Core;
 public sealed class LauncherSettings
 {
     public string? GamePath { get; set; }
+
+    // null = pas encore choisi : on reprend alors la valeur du fichier .cfg.
+    public bool? Tobacco { get; set; }
+
+    public bool? Underground { get; set; }
+
+    public bool? Restock { get; set; }
 }
 
 public static class SettingsStore
@@ -40,6 +47,22 @@ public static class SettingsStore
         {
             return new LauncherSettings();
         }
+    }
+
+    public static void SaveGamePath(string gamePath)
+    {
+        LauncherSettings settings = Load();
+        settings.GamePath = gamePath;
+        Save(settings);
+    }
+
+    public static void SaveModules(bool tobacco, bool underground, bool restock)
+    {
+        LauncherSettings settings = Load();
+        settings.Tobacco = tobacco;
+        settings.Underground = underground;
+        settings.Restock = restock;
+        Save(settings);
     }
 
     public static void Save(LauncherSettings settings)
