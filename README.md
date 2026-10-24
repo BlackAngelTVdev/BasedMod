@@ -19,6 +19,7 @@
 - ✅ **Prix libres** : les produits passent par la machine à prix comme les autres articles ; leur prix de base est prérempli.
 - ✅ **Multiplicateur de fonds** : modifie les montants ajoutés ou retirés via `GameData.CmdAlterFunds`, sans toucher au reste de l'économie.
 - ✅ **Configuration sans recompilation** : le rayon tabac peut être désactivé dans un fichier `.cfg` généré par BepInEx.
+- ✅ **Sous-sol clandestin** : culture d'herbes sous le magasin, trappe, rayon et caisse dédiés, police et amendes — jouable en solo comme en multijoueur.
 - ✅ **Build automatique** : chaque `dotnet build` copie le DLL du mod directement dans `BepInEx\plugins`.
 - ✅ **Chargement optimisé** : les prefabs, icônes et matériaux du rayon sont générés une seule fois puis réutilisés entre les parties ; les temps de chargement sont tracés dans le log (`[Perf]`).
 - ✅ **Launcher Windows** : application native C# (WinForms) qui détecte le jeu, installe BepInEx si nécessaire, compare la version installée aux releases GitHub et met le mod à jour.
@@ -105,11 +106,13 @@ La cible post-build copie automatiquement `ItemAdder.dll` dans :
 Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.dll` dans `BepInEx\plugins\`. Le build supprime aussi l'ancien `MonSupermarketMod.dll` pour éviter de charger deux versions.
 
 ### 5. Lancer le jeu
-Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Tu dois y voir :
+Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Au démarrage, puis au chargement d'une partie Classic, tu dois y voir :
 
 ```
-ItemAdder v1.2.1 chargé.
+ItemAdder v1.3.4 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
+[Souterrain] Produits illicites ajoutés : Herbe classique (id 383) et Herbe premium (id 384).
+[Souterrain] Sous-sol prêt.
 ```
 
 ## 📖 Utilisation
@@ -148,8 +151,39 @@ Le catalogue couvre :
 - **Cigares** : cigares, cigare premium, cigarillos vanille, cave à cigares et humidificateur.
 - **Accessoires** : briquets, zippo, briquet tempête, cendriers, grinder, filtres, étui à cigarettes et porte-cigarette.
 
-### Raccourci F5
-En solo ou en tant qu'hôte, appuie sur **F5** pour ajouter **50 points de franchise**. En multijoueur client, le raccourci est ignoré : les points doivent être modifiés par l'hôte.
+### Sous-sol clandestin (layout Classic)
+Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît dans le magasin ; **E** dessus ouvre/ferme l'accès, et marcher sur la trappe ouverte fait descendre au sous-sol.
+
+- **Cultiver** : approche une parcelle et appuie sur **E** pour planter (graine payante), arroser puis récolter. **F** bâche/débâche une parcelle pour la cacher.
+- **Vendre** : la récolte part dans le rayon à herbes du sous-sol. Les clients y descendent comme à l'étage et paient à la caisse du sous-sol. Tu peux aussi construire tes propres meubles et caisses dans la salle (les limites de construction du magasin y sont adaptées).
+- **Police** : un agent patrouille dans le magasin. Régulièrement, il inspecte les lieux ; si la trappe est ouverte et qu'il reste des plants visibles ou du stock au rayon, il peut descendre. S'il trouve quelque chose : **amende de 5 000 $** et saisie des plants et du stock. Ferme la trappe et bâche les plants avant sa descente pour éviter l'amende.
+
+| Clé | Section | Défaut | Effet |
+| :--- | :--- | :---: | :--- |
+| `ActiverSousSol` | `Souterrain` | `true` | Construit (ou non) le sous-sol clandestin |
+| `AmendeRaid` | `Souterrain` | `5000` | Montant de l'amende en cas de raid réussi |
+| `DureePousseHeures` | `Souterrain` | `8` | Heures de jeu pour arriver à maturité (si arrosé) |
+| `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection déclenche une descente |
+
+#### Jouer en multijoueur
+Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cultures, la trappe, le stock, la caisse et l'amende, et chaque client construit le même décor localement.
+
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.3.4) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
+3. Dans le log de l'hôte, vérifie : `[Souterrain] Sous-sol prêt.`, `[Souterrain] Étagère à herbes placée`, `[Souterrain] Caisse placée`, `[Souterrain] Policier spawn`.
+4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : la trappe, les parcelles, les bâches et la caisse sont alors pilotées par l'hôte.
+
+Chaque joueur peut planter, arroser, bâcher et récolter ; l'action est envoyée à l'hôte, qui applique le résultat et renvoie l'état. Le joueur qui agit reçoit aussi ses propres messages (graine achetée, parcelle arrosée, etc.).
+
+> Un joueur **sans le mod** ne verra ni la trappe ni le sous-sol. Ne mélange pas les versions : le jeu peut se désynchroniser si les tableaux de produits ou le nombre de parcelles diffèrent. L'hôte **et les clients** doivent garder `ActiverSousSol = true`.
+
+### Raccourcis F5 / F6
+En solo ou en tant qu'hôte :
+
+- **F5** : ajoute **50 points de franchise**.
+- **F6** : fixe les fonds à **2 000 000 000 $** (argent illimité pour acheter les extensions et casser les murs du magasin).
+
+En multijoueur client, les raccourcis sont ignorés : les points et les fonds doivent être modifiés par l'hôte.
 
 > ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` après avoir utilisé le rayon tabac dans une sauvegarde peut rendre cette sauvegarde illisible : garde l'option active pour les parties concernées.
 
@@ -184,6 +218,15 @@ BasedMod/
     ├── Tobacco/
     │   ├── TobaccoManager.cs
     │   └── TobaccoSkillNode.cs
+    ├── Underground/
+    │   ├── UndergroundManager.cs
+    │   ├── UndergroundBasement.cs
+    │   ├── UndergroundCatalog.cs
+    │   ├── UndergroundNetwork.cs
+    │   ├── UndergroundPatches.cs
+    │   ├── BasementDoor.cs
+    │   ├── CannabisPlot.cs
+    │   └── PoliceVisual.cs
     └── ItemAdder.csproj
 ```
 
