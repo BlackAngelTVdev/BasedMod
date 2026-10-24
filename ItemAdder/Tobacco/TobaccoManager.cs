@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using TMPro;
+using ItemAdder.Products;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -613,12 +614,15 @@ namespace ItemAdder.Tobacco
         private static GameObject BuildProductPrefab(
             ProductListing.ProductData baseData, ProductDefinition definition, int productId)
         {
-            GameObject pack = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            pack.name = "Tobacco_" + productId + "_" + definition.Name.Replace(' ', '_');
+            // Le corps est un vrai maillage (coque biseautée ou pièce tournée)
+            // posé directement sur la racine : le jeu lit
+            // productPrefab.GetComponent<MeshRenderer>().bounds pour
+            // connaître l'encombrement du produit.
+            GameObject pack = new GameObject(
+                "Tobacco_" + productId + "_" + definition.Name.Replace(' ', '_'));
             pack.transform.position = new Vector3(0f, -5000f, 0f);
             pack.transform.localScale = definition.Size;
 
-            RemoveCollider(pack);
             ApplyBaseMetadata(pack, baseData);
 
             // Les feuilles à rouler sont blanches : la couleur du catalogue sert
@@ -627,24 +631,10 @@ namespace ItemAdder.Tobacco
                 ? new Color(0.94f, 0.94f, 0.90f)
                 : definition.Color;
 
-            MeshRenderer renderer = pack.GetComponent<MeshRenderer>();
-            if (renderer != null)
-                renderer.sharedMaterial = GetMaterial(baseData, bodyColor);
-
-            if (UsesCylinderBody(definition.Look))
-            {
-                // Le cube racine reste le conteneur (taille et orientation stables)
-                // mais il devient invisible : le visuel est un cylindre enfant.
-                if (renderer != null)
-                    renderer.enabled = false;
-
-                GameObject body = AddPart(
-                    pack, baseData, PrimitiveType.Cylinder, Vector3.zero,
-                    new Vector3(1f, 0.5f, 1f), bodyColor, "Body");
-
-                if (definition.Look == ProductLook.Cigar)
-                    body.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            }
+            MeshFilter filter = pack.AddComponent<MeshFilter>();
+            filter.sharedMesh = GetBodyMesh(definition);
+            MeshRenderer renderer = pack.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = GetMaterial(baseData, bodyColor);
 
             AddProductDetails(pack, baseData, definition);
 
@@ -653,11 +643,90 @@ namespace ItemAdder.Tobacco
             return pack;
         }
 
-        private static bool UsesCylinderBody(ProductLook look)
+        /// <summary>
+        /// Maillage du corps, construit dans un cube unitaire : le prefab racine
+        /// est ensuite mis à l'échelle de la taille réelle du produit.
+        /// </summary>
+        private static Mesh GetBodyMesh(ProductDefinition definition)
         {
-            return look == ProductLook.Bottle || look == ProductLook.Vape ||
-                   look == ProductLook.Tin || look == ProductLook.Cigar ||
-                   look == ProductLook.Ashtray || look == ProductLook.Grinder;
+            switch (definition.Look)
+            {
+                case ProductLook.Pack:
+                    return ProductMeshes.Slab("tob_pack", 0.09f, 0.10f, bulge: 0.02f);
+
+                case ProductLook.Pouch:
+                    return ProductMeshes.Slab("tob_pouch", 0.14f, 0.09f,
+                        bulge: 0.10f, pinch: 0.16f, lumpiness: 0.010f);
+
+                case ProductLook.Tube:
+                    return ProductMeshes.Slab("tob_tube", 0.34f, 0.22f,
+                        bulge: 0.06f, cornerSegments: 8, bevelLayers: 4);
+
+                case ProductLook.Bottle:
+                    return ProductMeshes.Lathe("tob_bottle", new[]
+                    {
+                        new Vector2(0f, -0.50f), new Vector2(0.34f, -0.50f),
+                        new Vector2(0.45f, -0.45f), new Vector2(0.46f, -0.28f),
+                        new Vector2(0.46f, 0.10f), new Vector2(0.42f, 0.20f),
+                        new Vector2(0.24f, 0.26f), new Vector2(0.21f, 0.30f),
+                        new Vector2(0.25f, 0.34f), new Vector2(0.25f, 0.44f),
+                        new Vector2(0.20f, 0.48f), new Vector2(0f, 0.48f)
+                    }, 22);
+
+                case ProductLook.Vape:
+                    return ProductMeshes.Slab("tob_vape", 0.42f, 0.16f,
+                        bulge: 0.04f, cornerSegments: 8, bodyLayers: 4);
+
+                case ProductLook.Tin:
+                    return ProductMeshes.Lathe("tob_tin", new[]
+                    {
+                        new Vector2(0f, -0.50f), new Vector2(0.36f, -0.50f),
+                        new Vector2(0.46f, -0.45f), new Vector2(0.48f, -0.30f),
+                        new Vector2(0.48f, 0.26f), new Vector2(0.45f, 0.36f),
+                        new Vector2(0.32f, 0.42f), new Vector2(0f, 0.42f)
+                    }, 24);
+
+                case ProductLook.Cigar:
+                    // Couché sur l'axe X : la longueur du cigare suit la
+                    // profondeur du produit dans le catalogue.
+                    return ProductMeshes.Lathe("tob_cigar", new[]
+                    {
+                        new Vector2(0f, -0.50f), new Vector2(0.26f, -0.50f),
+                        new Vector2(0.42f, -0.45f), new Vector2(0.47f, -0.34f),
+                        new Vector2(0.47f, 0.28f), new Vector2(0.43f, 0.42f),
+                        new Vector2(0.28f, 0.48f), new Vector2(0f, 0.48f)
+                    }, 16, orientation: Quaternion.Euler(0f, 0f, -90f));
+
+                case ProductLook.Lighter:
+                    return ProductMeshes.Slab("tob_lighter", 0.13f, 0.12f, cornerSegments: 5);
+
+                case ProductLook.Ashtray:
+                    return ProductMeshes.Lathe("tob_ashtray", new[]
+                    {
+                        new Vector2(0f, -0.50f), new Vector2(0.34f, -0.50f),
+                        new Vector2(0.46f, -0.44f), new Vector2(0.49f, -0.20f),
+                        new Vector2(0.49f, 0.22f), new Vector2(0.44f, 0.36f),
+                        new Vector2(0.34f, 0.42f), new Vector2(0.30f, 0.28f),
+                        new Vector2(0.26f, 0.08f), new Vector2(0.18f, 0.02f),
+                        new Vector2(0f, 0.02f)
+                    }, 26);
+
+                case ProductLook.Grinder:
+                    return ProductMeshes.Lathe("tob_grinder", new[]
+                    {
+                        new Vector2(0f, -0.50f), new Vector2(0.34f, -0.50f),
+                        new Vector2(0.44f, -0.44f), new Vector2(0.48f, -0.22f),
+                        new Vector2(0.48f, 0.14f), new Vector2(0.44f, 0.26f),
+                        new Vector2(0.44f, 0.38f), new Vector2(0.30f, 0.44f),
+                        new Vector2(0f, 0.44f)
+                    }, 40, knurlDepth: 0.07f, knurlRidges: 22);
+
+                case ProductLook.Paper:
+                    return ProductMeshes.Slab("tob_paper", 0.16f, 0.10f, cornerSegments: 4);
+
+                default:
+                    return ProductMeshes.Slab("tob_box", 0.10f, 0.10f);
+            }
         }
 
         private static void AddProductDetails(
@@ -670,128 +739,129 @@ namespace ItemAdder.Tobacco
             Color white = DetailWhite;
             Color gold = DetailGold;
 
+            Mesh band = ProductMeshes.Lathe("tob_band", new[]
+            {
+                new Vector2(0f, -0.50f), new Vector2(0.44f, -0.50f),
+                new Vector2(0.50f, -0.44f), new Vector2(0.50f, 0.44f),
+                new Vector2(0.44f, 0.50f), new Vector2(0f, 0.50f)
+            }, 24);
+            Mesh plate = ProductMeshes.Slab("tob_plate", 0.07f, 0.09f);
+            Mesh roundPlate = ProductMeshes.Slab("tob_round_plate", 0.34f, 0.18f,
+                cornerSegments: 8);
+
             switch (definition.Look)
             {
                 case ProductLook.Pack:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0f),
-                        new Vector3(1.02f, 0.30f, 1.02f), white, "Band");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.47f, 0f),
-                        new Vector3(1.03f, 0.10f, 1.03f), gold, "Top");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, 0.28f, 0f),
+                        new Vector3(1.03f, 0.07f, 1.03f), Quaternion.identity, gold, "FlipTop");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, -0.02f, 0.50f),
+                        new Vector3(0.70f, 0.46f, 0.10f), Quaternion.identity, white, "Label");
                     break;
 
                 case ProductLook.Pouch:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.42f, 0f),
-                        new Vector3(1.01f, 0.14f, 1.01f), dark, "Seal");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
-                        new Vector3(0.70f, 0.36f, 1.03f), white, "Label");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, 0.42f, 0f),
+                        new Vector3(1.01f, 0.16f, 1.01f), Quaternion.identity, dark, "Seal");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, -0.02f, 0.50f),
+                        new Vector3(0.68f, 0.42f, 0.10f), Quaternion.identity, white, "Label");
                     break;
 
                 case ProductLook.Tube:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.20f, 0f),
-                        new Vector3(1.02f, 0.26f, 1.02f), white, "Label");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                        new Vector3(1.03f, 0.10f, 1.03f), light, "Lid");
+                    AddMeshPart(root, baseData, roundPlate, new Vector3(0f, 0.20f, 0f),
+                        new Vector3(1.02f, 0.30f, 1.02f), Quaternion.identity, white, "Label");
+                    AddMeshPart(root, baseData, roundPlate, new Vector3(0f, 0.44f, 0f),
+                        new Vector3(1.02f, 0.14f, 1.02f), Quaternion.identity, light, "Lid");
                     break;
 
                 case ProductLook.Bottle:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                        new Vector3(0.64f, 0.28f, 0.64f), dark, "Cap");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.08f, 0f),
-                        new Vector3(1.03f, 0.46f, 1.03f), white, "Label");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, -0.12f, 0f),
+                        new Vector3(1.04f, 0.62f, 1.04f), Quaternion.identity, white, "Label");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.36f, 0f),
+                        new Vector3(0.56f, 0.26f, 0.56f), Quaternion.identity, dark, "Cap");
                     break;
 
                 case ProductLook.Vape:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                        new Vector3(0.80f, 0.18f, 0.80f), gold, "Mouthpiece");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.46f, 0f),
-                        new Vector3(0.85f, 0.10f, 0.85f), light, "Tip");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.02f, 0f),
-                        new Vector3(1.04f, 0.18f, 1.04f), white, "Label");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.44f, 0f),
+                        new Vector3(0.62f, 0.22f, 0.62f), Quaternion.identity, gold, "Mouthpiece");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, -0.44f, 0f),
+                        new Vector3(0.52f, 0.16f, 0.52f), Quaternion.identity, light, "Tip");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, -0.02f, 0f),
+                        new Vector3(1.14f, 0.20f, 1.14f), Quaternion.identity, white, "Label");
                     break;
 
                 case ProductLook.Tin:
-                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.38f, 0f),
-                        new Vector3(1.02f, 0.12f, 1.02f), light, "Lid");
-                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0f),
-                        new Vector3(1.04f, 0.20f, 1.04f), white, "Label");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.05f, 0f),
+                        new Vector3(1.04f, 0.46f, 1.04f), Quaternion.identity, white, "Label");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.38f, 0f),
+                        new Vector3(1.02f, 0.16f, 1.02f), Quaternion.identity, light, "Lid");
                     break;
 
                 case ProductLook.Cigar:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
-                        new Vector3(0.14f, 1.06f, 1.06f), gold, "Band");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.47f, 0f, 0f),
-                        new Vector3(0.06f, 1.04f, 1.04f), dark, "Tip");
+                    // Bague du cigare : le cylindre est couché sur l'axe X,
+                    // comme le corps.
+                    AddMeshPart(root, baseData, band, new Vector3(0.06f, 0f, 0f),
+                        new Vector3(1.02f, 0.42f, 1.02f), Quaternion.Euler(0f, 0f, -90f), gold, "Band");
+                    AddMeshPart(root, baseData, band, new Vector3(0.44f, 0f, 0f),
+                        new Vector3(0.92f, 0.12f, 0.92f), Quaternion.Euler(0f, 0f, -90f), dark, "Tip");
                     break;
 
                 case ProductLook.Lighter:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f),
-                        new Vector3(1.02f, 0.34f, 1.02f), light, "Cap");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.18f, 0.33f, 0f),
-                        new Vector3(0.30f, 0.26f, 1.06f), dark, "Wheel");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, 0.34f, 0f),
+                        new Vector3(1.02f, 0.30f, 1.02f), Quaternion.identity, light, "Cap");
+                    AddMeshPart(root, baseData, band, new Vector3(0.16f, 0.40f, 0f),
+                        new Vector3(0.34f, 0.26f, 0.34f), Quaternion.Euler(0f, 0f, -90f), dark, "Wheel");
                     break;
 
                 case ProductLook.Ashtray:
-                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.48f, 0f),
-                        new Vector3(0.72f, 0.10f, 0.72f), dark, "Bowl");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(-0.36f, 0.55f, 0f),
-                        new Vector3(0.16f, 0.16f, 0.22f), light, "Notch");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0.36f, 0.55f, 0f),
-                        new Vector3(0.16f, 0.16f, 0.22f), light, "Notch");
+                    AddMeshPart(root, baseData, plate, new Vector3(-0.34f, 0.40f, 0f),
+                        new Vector3(0.24f, 0.16f, 0.36f), Quaternion.identity, light, "Rest");
+                    AddMeshPart(root, baseData, plate, new Vector3(0.34f, 0.40f, 0f),
+                        new Vector3(0.24f, 0.16f, 0.36f), Quaternion.identity, light, "Rest");
                     break;
 
                 case ProductLook.Grinder:
-                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.45f, 0f),
-                        new Vector3(1.02f, 0.14f, 1.02f), dark, "Lid");
-                    AddPart(root, baseData, PrimitiveType.Cylinder, new Vector3(0f, 0.56f, 0f),
-                        new Vector3(0.24f, 0.08f, 0.24f), gold, "Handle");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.36f, 0f),
+                        new Vector3(1.02f, 0.24f, 1.02f), Quaternion.identity, dark, "Lid");
+                    AddMeshPart(root, baseData, band, new Vector3(0f, 0.48f, 0f),
+                        new Vector3(0.30f, 0.20f, 0.30f), Quaternion.identity, gold, "Handle");
                     break;
 
                 case ProductLook.Paper:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
-                        new Vector3(1.02f, 0.24f, 1.02f), definition.Color, "Stripe");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, -0.20f, 0f),
-                        new Vector3(0.72f, 0.14f, 1.03f), light, "Mark");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, 0.10f, 0.50f),
+                        new Vector3(0.72f, 0.36f, 0.10f), Quaternion.identity, definition.Color, "Label");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, -0.26f, 0.50f),
+                        new Vector3(0.72f, 0.12f, 0.10f), Quaternion.identity, light, "GumLine");
                     break;
 
                 default:
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0.34f, 0f),
-                        new Vector3(1.02f, 0.10f, 1.02f), dark, "Lid");
-                    AddPart(root, baseData, PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
-                        new Vector3(0.62f, 0.34f, 1.03f), white, "Label");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, 0.32f, 0f),
+                        new Vector3(1.02f, 0.10f, 1.02f), Quaternion.identity, dark, "Lid");
+                    AddMeshPart(root, baseData, plate, new Vector3(0f, -0.04f, 0.50f),
+                        new Vector3(0.62f, 0.40f, 0.10f), Quaternion.identity, white, "Label");
                     break;
             }
         }
 
-        private static GameObject AddPart(
-            GameObject root, ProductListing.ProductData baseData, PrimitiveType primitive,
-            Vector3 localPosition, Vector3 localScale, Color color, string name)
+        private static GameObject AddMeshPart(
+            GameObject root, ProductListing.ProductData baseData, Mesh mesh,
+            Vector3 localPosition, Vector3 localScale, Quaternion localRotation,
+            Color color, string name)
         {
-            GameObject part = GameObject.CreatePrimitive(primitive);
-            part.name = name;
+            if (mesh == null)
+                return null;
+
+            GameObject part = new GameObject(name);
             part.transform.SetParent(root.transform, false);
             part.transform.localPosition = localPosition;
             part.transform.localScale = localScale;
+            part.transform.localRotation = localRotation;
 
-            RemoveCollider(part);
+            MeshFilter filter = part.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+            MeshRenderer renderer = part.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = GetMaterial(baseData, color);
+
             ApplyBaseMetadata(part, baseData);
-
-            MeshRenderer renderer = part.GetComponent<MeshRenderer>();
-            if (renderer != null)
-                renderer.sharedMaterial = GetMaterial(baseData, color);
-
             return part;
-        }
-
-        private static void RemoveCollider(GameObject value)
-        {
-            Collider collider = value.GetComponent<Collider>();
-            if (collider == null)
-                return;
-
-            // Destroy est différé : on désactive tout de suite pour que les clones
-            // instantanés dans la même frame n'héritent pas d'un collider actif.
-            collider.enabled = false;
-            Object.Destroy(collider);
         }
 
         private static void ApplyBaseMetadata(GameObject value, ProductListing.ProductData baseData)
@@ -881,6 +951,12 @@ namespace ItemAdder.Tobacco
                 material.mainTexture = null;
             if (material.HasProperty("_BaseMap"))
                 material.SetTexture("_BaseMap", null);
+
+            // Les maillages générés sont fins et biseautés : on les rend sur
+            // leurs deux faces pour qu'aucun détail ne disparaisse selon
+            // l'angle de vue.
+            if (material.HasProperty("_Cull"))
+                material.SetFloat("_Cull", 0f);
 
             CreatedMaterials.Add(material);
             return material;
