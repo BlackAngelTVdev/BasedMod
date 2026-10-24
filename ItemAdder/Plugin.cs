@@ -15,12 +15,13 @@ namespace ItemAdder
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "ItemAdder";
-        public const string PluginVersion = "1.3.5";
+        public const string PluginVersion = "1.4.2";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
         internal static ConfigEntry<bool> EnableTobacco;
         internal static ConfigEntry<bool> EnableUnderground;
+        internal static ConfigEntry<bool> EnableSmartRestock;
         internal static ConfigEntry<float> UndergroundRaidFine;
         internal static ConfigEntry<float> UndergroundGrowHours;
         internal static ConfigEntry<float> UndergroundRaidChance;
@@ -42,6 +43,12 @@ namespace ItemAdder
                 "ActiverRayonTabac",
                 true,
                 "Ajoute le rayon Tabac (cigarettes, tabac à rouler, vapes, snus, cigares, accessoires) et son palier dans l'arbre de compétences.");
+
+            EnableSmartRestock = Config.Bind(
+                "Employés",
+                "ReassortIntelligent",
+                true,
+                "Les employés de réassort rangent les produits restés en réserve sur l'étagère compatible la plus proche, même si le joueur ne les a jamais placés.");
 
             EnableUnderground = Config.Bind(
                 "Souterrain",

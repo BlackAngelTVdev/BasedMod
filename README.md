@@ -14,12 +14,13 @@
 
 ## ✨ Fonctionnalités
 - ✅ **Rayon Tabac** : ajoute 44 produits vendables dans un nouveau groupe « Tabac » du carnet de commandes — cigarettes, tabac à rouler, tubes et filtres, vapes jetables et e-liquides, snus, tabac chauffé, cigares et articles pour fumeurs.
-- ✅ **Visuels variés** : chaque produit possède son icône et son prefab 3D (paquet, blague, bouteille, vape, boîte métallique, cigare, briquet, cendrier, grinder, etc.).
+- ✅ **Modèles 3D générés** : chaque produit a son propre maillage (coques biseautées, pièces tournées : paquet, blague, bouteille, vape, boîte métallique, cigare, briquet, cendrier, grinder, bourgeon), construit sommet par sommet au chargement — aucune primitive Unity, aucun fichier externe à installer.
 - ✅ **Palier d'arbre de compétences** : ajoute « Tabac I » juste après « Fruits de mer I ». Le palier coûte 1 point de franchise et exige « Fruits de mer I ».
 - ✅ **Prix libres** : les produits passent par la machine à prix comme les autres articles ; leur prix de base est prérempli.
 - ✅ **Multiplicateur de fonds** : modifie les montants ajoutés ou retirés via `GameData.CmdAlterFunds`, sans toucher au reste de l'économie.
 - ✅ **Configuration sans recompilation** : le rayon tabac peut être désactivé dans un fichier `.cfg` généré par BepInEx.
-- ✅ **Sous-sol clandestin** : culture d'herbes sous le magasin, trappe, rayon et caisse dédiés, police et amendes — jouable en solo comme en multijoueur.
+- ✅ **Sous-sol clandestin** : culture d'herbes sous le magasin, trappe discrète dans la surface de vente (côté rue, à droite), rayon de vente à l'étage, police et amendes — jouable en solo comme en multijoueur.
+- ✅ **Employés plus logiques** : un produit resté en réserve et jamais posé sur une étagère est rangé par un employé de réassort, sur l'étagère compatible la plus proche.
 - ✅ **Build automatique** : chaque `dotnet build` copie le DLL du mod directement dans `BepInEx\plugins`.
 - ✅ **Chargement optimisé** : les prefabs, icônes et matériaux du rayon sont générés une seule fois puis réutilisés entre les parties ; les temps de chargement sont tracés dans le log (`[Perf]`).
 - ✅ **Launcher Windows** : application native C# (WinForms) qui détecte le jeu, installe BepInEx si nécessaire, compare la version installée aux releases GitHub et met le mod à jour.
@@ -109,7 +110,7 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.d
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Au démarrage, puis au chargement d'une partie Classic, tu dois y voir :
 
 ```
-ItemAdder v1.3.5 chargé.
+ItemAdder v1.4.2 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
 [Souterrain] Produits illicites ajoutés : Herbe classique (id 383) et Herbe premium (id 384).
 [Souterrain] Sous-sol prêt.
@@ -128,6 +129,9 @@ Modifie les valeurs puis relance le jeu (la configuration est lue au démarrage)
 [Tabac]
 ActiverRayonTabac = true
 
+[Employés]
+ReassortIntelligent = true
+
 [Général]
 MultiplicateurDeFonds = 1
 ```
@@ -135,7 +139,13 @@ MultiplicateurDeFonds = 1
 | Clé | Section | Défaut | Effet |
 | :--- | :--- | :---: | :--- |
 | `ActiverRayonTabac` | `Tabac` | `true` | Ajoute (ou non) le rayon tabac et son palier d'arbre de compétences |
+| `ReassortIntelligent` | `Employés` | `true` | Les employés de réassort rangent les produits en réserve qui ne sont sur aucune étagère, sur l'étagère compatible la plus proche |
 | `MultiplicateurDeFonds` | `Général` | `1` | Multiplie les fonds ajoutés/retirés (`1` = vanilla) |
+
+### Employés et réassort
+Le jeu ne demande aux employés de ranger que les produits déjà affectés à une rangée d'étagère : un produit rapporté du carnet de commandes puis stocké en réserve sans avoir été posé n'intéresse personne et les employés restent inactifs.
+
+Avec `ReassortIntelligent`, dès qu'un employé de réassort n'a plus rien à faire, il prend le premier produit en réserve qui n'apparaît sur aucune étagère, réserve une rangée libre d'une étagère du bon type — la plus proche de lui — puis va la remplir. Le même mécanisme sert pour les produits du rayon Tabac et pour les herbes du sous-sol.
 
 ### Utiliser le rayon tabac
 1. Débloque d'abord **Fruits de mer I** dans l'arbre de compétences.
@@ -152,10 +162,10 @@ Le catalogue couvre :
 - **Accessoires** : briquets, zippo, briquet tempête, cendriers, grinder, filtres, étui à cigarettes et porte-cigarette.
 
 ### Sous-sol clandestin (layout Classic)
-Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît dans le magasin ; **E** dessus ouvre/ferme l'accès, et marcher sur la trappe ouverte fait descendre au sous-sol.
+Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît **dans la surface de vente, côté rue et sur la droite** (le mod repère la rue grâce aux points d'apparition des clients), toujours à l'intérieur des limites du magasin et sur un sol libre : **E** dessus ouvre/ferme l'accès, et marcher sur la trappe ouverte fait descendre au sous-sol. Si la trappe te pose problème (obstacle, passage gêné), déplace simplement le meuble qui la bloquait ou signale-le : le mod cherche un autre emplacement libre au chargement suivant.
 
 - **Cultiver** : approche une parcelle et appuie sur **E** pour planter (graine payante), arroser puis récolter. **F** bâche/débâche une parcelle pour la cacher.
-- **Vendre** : la récolte part dans le rayon à herbes du sous-sol. Les clients y descendent comme à l'étage et paient à la caisse du sous-sol. Tu peux aussi construire tes propres meubles et caisses dans la salle (les limites de construction du magasin y sont adaptées).
+- **Vendre** : la récolte part dans un rayon à herbes placé **à l'étage**, juste à côté d'un rayon déjà posé par le joueur (jamais dans la réserve). Le jeu sauvegardant les meubles, la copie restaurée au chargement est retirée et son stock transféré sur le rayon recréé au bon endroit. Les clients le prennent et paient aux caisses normales ; aucune caisse n'est construite au sous-sol. Le rayon n'apparaît dans la demande des clients que s'il contient réellement du stock, pour éviter qu'ils cherchent une herbe absente ; si une variété s'épuise en cours de journée, elle est aussi retirée des listes de courses déjà en cours, donc personne ne repart chercher une herbe qui n'est plus là.
 - **Police** : un agent patrouille dans le magasin. Régulièrement, il inspecte les lieux ; si la trappe est ouverte et qu'il reste des plants visibles ou du stock au rayon, il peut descendre. S'il trouve quelque chose : **amende de 5 000 $** et saisie des plants et du stock. Ferme la trappe et bâche les plants avant sa descente pour éviter l'amende.
 
 | Clé | Section | Défaut | Effet |
@@ -166,12 +176,12 @@ Le sous-sol est construit automatiquement sous le magasin dès que le layout **C
 | `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection déclenche une descente |
 
 #### Jouer en multijoueur
-Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cultures, la trappe, le stock, la caisse et l'amende, et chaque client construit le même décor localement.
+Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cultures, la trappe, le stock du rayon et l'amende, et chaque client construit le même décor localement.
 
-1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.3.5) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.2) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
 2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
-3. Dans le log de l'hôte, vérifie : `[Souterrain] Sous-sol prêt.`, `[Souterrain] Étagère à herbes placée`, `[Souterrain] Caisse placée`, `[Souterrain] Policier spawn`.
-4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : la trappe, les parcelles, les bâches et la caisse sont alors pilotées par l'hôte.
+3. Dans le log de l'hôte, vérifie : `[Souterrain] Sous-sol prêt.`, `[Souterrain] Étagère à herbes placée à l'étage`, `[Souterrain] Policier spawn`.
+4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : la trappe, les parcelles, les bâches et le stock du rayon sont alors pilotés par l'hôte.
 
 Chaque joueur peut planter, arroser, bâcher et récolter ; l'action est envoyée à l'hôte, qui applique le résultat et renvoie l'état. Le joueur qui agit reçoit aussi ses propres messages (graine achetée, parcelle arrosée, etc.).
 

@@ -12,6 +12,7 @@ winhttp.dll
 # Outils et fichiers locaux
 .freebuff/
 .tools/
+renders/
 
 # Launcher publié et fichiers de diagnostic
 dist/
