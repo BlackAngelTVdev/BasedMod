@@ -17,7 +17,6 @@ namespace ItemAdder.Underground
         internal Vector3 RampBottom;
         internal Vector3 RoomCenter;
         internal Vector3 ShelfPosition;
-        internal Vector3 CheckoutPosition;
         internal CannabisPlot[] Plots;
         internal BasementDoor Door;
         internal Collider FloorCollider;
@@ -102,7 +101,6 @@ namespace ItemAdder.Underground
 
             // Emplacements
             layout.ShelfPosition = new Vector3(center.x + 5.7f, FloorY + 0.02f, center.z - 2.2f);
-            layout.CheckoutPosition = new Vector3(center.x + 5.7f, FloorY + 0.02f, center.z + 2.8f);
 
             var plots = new List<CannabisPlot>();
             float[] plotX = { -6.3f, -3.6f };

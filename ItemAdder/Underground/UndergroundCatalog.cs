@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ItemAdder.Products;
 using TMPro;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -175,8 +176,11 @@ namespace ItemAdder.Underground
             if (manager.IsServer == false)
                 return;
 
-            SetAvailable(listing, ClassicProductId, manager.CanSellHerbs);
-            SetAvailable(listing, PremiumProductId, manager.CanSellHerbs);
+            // Chaque variété n'est proposée aux clients que si elle est
+            // réellement en rayon : une herbe épuisée sort de la liste, sinon
+            // les clients partent la chercher et se plaignent qu'elle manque.
+            SetAvailable(listing, ClassicProductId, manager.HasClassicStock);
+            SetAvailable(listing, PremiumProductId, manager.HasPremiumStock);
         }
 
         /// <summary>
@@ -322,35 +326,56 @@ namespace ItemAdder.Underground
             return _premiumSprite;
         }
 
+        /// <summary>
+        /// Bourgeon en vrai volume : une tête bosselée générée sommet par sommet,
+        /// des renflements secondaires et quelques feuilles, au lieu d'une sphère
+        /// et de cubes.
+        /// </summary>
         private static GameObject CreatePrefab(
             ProductListing.ProductData baseData, Color color, float size,
             string name, float leafScale)
         {
-            GameObject root = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            root.name = "Underground_" + name;
+            GameObject root = new GameObject("Underground_" + name);
             root.transform.position = new Vector3(0f, -5000f, 0f);
             root.transform.localScale = new Vector3(size, size * 0.8f, size);
 
-            RemoveCollider(root);
             CopyMetadata(root, baseData);
+
+            MeshFilter filter = root.AddComponent<MeshFilter>();
+            filter.sharedMesh = ProductMeshes.Blob("herb_core", 0.20f, 3);
+            root.AddComponent<MeshRenderer>();
             SetMaterial(root, color);
 
-            for (int i = 0; i < 4; i++)
+            Vector3[] bumps =
             {
-                GameObject leaf = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                leaf.name = "Leaf" + i;
-                leaf.transform.SetParent(root.transform, false);
-                leaf.transform.localPosition = new Vector3(
-                    Mathf.Cos(i * Mathf.PI * 0.5f) * 0.55f,
-                    0.15f + (i % 2) * 0.2f,
-                    Mathf.Sin(i * Mathf.PI * 0.5f) * 0.55f);
-                leaf.transform.localScale = new Vector3(
-                    0.55f * leafScale, 0.12f, 0.28f * leafScale);
-                leaf.transform.localRotation = Quaternion.Euler(
-                    0f, i * 90f, 25f * leafScale);
-                RemoveCollider(leaf);
-                CopyMetadata(leaf, baseData);
-                SetMaterial(leaf, Color.Lerp(color, Color.white, 0.18f));
+                new Vector3(0.30f, 0.22f, 0.10f),
+                new Vector3(-0.26f, 0.26f, -0.12f),
+                new Vector3(0.16f, -0.28f, 0.22f),
+                new Vector3(-0.18f, -0.10f, -0.30f),
+                new Vector3(0.02f, 0.34f, 0.26f)
+            };
+            float[] bumpSize = { 0.52f, 0.48f, 0.54f, 0.46f, 0.44f };
+
+            for (int i = 0; i < bumps.Length; i++)
+            {
+                AddPart(root, baseData,
+                    ProductMeshes.Blob("herb_bump", 0.24f, 11 + i * 7),
+                    bumps[i], Vector3.one * bumpSize[i],
+                    Quaternion.Euler(i * 47f, i * 63f, i * 29f),
+                    Color.Lerp(color, Color.white, i % 2 == 0 ? 0.10f : 0.02f));
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                AddPart(root, baseData,
+                    ProductMeshes.Blob("herb_leaf", 0.07f, 41 + i * 5),
+                    new Vector3(
+                        Mathf.Cos(i * 2.1f) * 0.38f,
+                        0.30f + i * 0.05f,
+                        Mathf.Sin(i * 2.1f) * 0.38f),
+                    new Vector3(0.50f * leafScale, 0.08f, 0.30f * leafScale),
+                    Quaternion.Euler(0f, i * 70f, 22f * leafScale),
+                    Color.Lerp(color, Color.white, 0.30f));
             }
 
             Object.DontDestroyOnLoad(root);
@@ -438,14 +463,26 @@ namespace ItemAdder.Underground
             }
         }
 
-        private static void RemoveCollider(GameObject value)
+        private static void AddPart(
+            GameObject root, ProductListing.ProductData baseData, Mesh mesh,
+            Vector3 localPosition, Vector3 localScale, Quaternion localRotation,
+            Color color)
         {
-            Collider collider = value.GetComponent<Collider>();
-            if (collider == null)
+            if (mesh == null)
                 return;
 
-            collider.enabled = false;
-            Object.Destroy(collider);
+            GameObject part = new GameObject("Bud");
+            part.transform.SetParent(root.transform, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = localScale;
+            part.transform.localRotation = localRotation;
+
+            MeshFilter filter = part.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+            part.AddComponent<MeshRenderer>();
+            SetMaterial(part, color);
+
+            CopyMetadata(part, baseData);
         }
 
         private static void CopyMetadata(GameObject value, ProductListing.ProductData baseData)
@@ -494,6 +531,11 @@ namespace ItemAdder.Underground
                 material.mainTexture = null;
             if (material.HasProperty("_BaseMap"))
                 material.SetTexture("_BaseMap", null);
+
+            // Bourgeon bosselé : les deux faces sont rendues pour éviter qu'un
+            // renflement mal orienté ne crée un trou visuel.
+            if (material.HasProperty("_Cull"))
+                material.SetFloat("_Cull", 0f);
 
             renderer.sharedMaterial = material;
             Object.DontDestroyOnLoad(material);

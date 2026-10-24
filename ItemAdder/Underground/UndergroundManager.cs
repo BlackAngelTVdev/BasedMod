@@ -25,7 +25,6 @@ namespace ItemAdder.Underground
         private CannabisPlot[] _plots;
         private BasementDoor _door;
         private Data_Container _shelf;
-        private Data_Container _checkout;
         private GameObject _police;
         private NavMeshAgent _policeAgent;
         private uint _policeNetId;
@@ -47,6 +46,9 @@ namespace ItemAdder.Underground
         private float _nextBuildAttempt;
         private float _nextSpawnRetry;
         private float _nextPrefabWarning;
+        private float _nextDemandPurge;
+        private float _nextFallCheck;
+        private float _nextLeftoverCheck;
         private float _nextClientResync;
         private float _nextPoliceVisualAttempt;
         private bool _policeVisualAttached;
@@ -86,14 +88,9 @@ namespace ItemAdder.Underground
                    hit.collider == manager._layout.RampCollider;
         }
 
-        internal bool CanSellHerbs
-        {
-            get
-            {
-                return IsServer && _shelf != null && _doorOpen &&
-                       (GetShelfQuantity(0) > 0 || GetShelfQuantity(1) > 0);
-            }
-        }
+        internal bool HasClassicStock => IsServer && GetShelfQuantity(0) > 0;
+
+        internal bool HasPremiumStock => IsServer && GetShelfQuantity(1) > 0;
 
         private void Awake()
         {
@@ -186,9 +183,9 @@ namespace ItemAdder.Underground
             else if (_networkReady && NetworkServer.active && Time.time >= _nextSpawnRetry)
             {
                 // Les prefabs du jeu ne sont pas toujours prêts au premier tick :
-                // on retente tant que le rayon, la caisse ou le policier manquent.
+                // on retente tant que le rayon ou le policier manque.
                 _nextSpawnRetry = Time.time + 4f;
-                if (_shelf == null || _checkout == null || _police == null)
+                if (_shelf == null || _police == null)
                     SpawnNetworkObjects();
             }
 
@@ -200,7 +197,14 @@ namespace ItemAdder.Underground
             }
 
             HandleLocalInput();
+            TickFallRecovery();
             UpdatePlots();
+            // Le stock du rayon change quand les clients achètent : on remet à
+            // jour la liste des produits demandés pour qu'un rayon vide ne
+            // laisse pas les clients chercher une herbe introuvable.
+            RefreshProducts();
+            PurgeUnavailableDemand();
+            TickLeftoverCleanup();
             TickPolice();
             TickSave();
         }
@@ -238,7 +242,14 @@ namespace ItemAdder.Underground
             float minZ = builder.buildZLimits.x;
             float maxZ = builder.buildZLimits.y;
 
+            // La trappe reste dans la surface de vente. Posée dehors, sur le
+            // trottoir, elle perçait le décor et le joueur restait coincé dans
+            // la géométrie du sous-sol.
             Vector3 hatch = FindHatchPosition(minX, maxX, minZ, maxZ);
+            Plugin.Log.LogInfo(
+                $"[Souterrain] Trappe placée côté rue, à droite de la surface " +
+                $"de vente ({hatch.x:0.0}, {hatch.z:0.0}).");
+
             string floorTag = "";
             int floorLayer = 0;
             if (Physics.Raycast(hatch + Vector3.up * 2.5f, Vector3.down,
@@ -279,7 +290,7 @@ namespace ItemAdder.Underground
             _nextSave = Time.time + 12f;
             _nextClientResync = Time.time + 30f;
 
-            Notify("Le sous-sol clandestin est aménagé. Trappe dans le magasin.");
+            Notify("Le sous-sol clandestin est aménagé. Trappe côté rue, à droite du magasin.");
             Plugin.Log.LogInfo("[Souterrain] Sous-sol prêt.");
 
             if (NetworkServer.active)
@@ -290,64 +301,156 @@ namespace ItemAdder.Underground
             }
         }
 
+        /// <summary>
+        /// Choisit un emplacement de trappe **à l'intérieur** du magasin, côté
+        /// rue et sur la droite de la surface de vente. La direction de la rue
+        /// vient des points d'apparition des clients (sur le trottoir). Une
+        /// grille de candidats est ensuite parcourue depuis ce point, et on
+        /// retient le premier sol praticable qui laisse la place au cadre de
+        /// 3,3 m de la trappe. En dernier recours, le centre du magasin.
+        /// </summary>
         private static Vector3 FindHatchPosition(float minX, float maxX, float minZ, float maxZ)
         {
             float centerX = (minX + maxX) * 0.5f;
             float centerZ = (minZ + maxZ) * 0.5f;
+            Vector3 center = new Vector3(centerX, 0f, centerZ);
 
-            Vector3[] candidates =
+            // Trop petit pour placer une trappe de 3,3 m avec ses marges :
+            // on retombe sur le centre du magasin (comme les versions
+            // précédentes, qui ne posaient pas de problème).
+            if (maxX - minX < 7f || maxZ - minZ < 7f)
+                return center;
+
+            const float margin = 2.2f;
+
+            // Direction de la rue : les clients apparaissent sur le trottoir,
+            // devant la façade.
+            Vector3 roadDirection = GetRoadDirection(center);
+            Vector3 anchor = center;
+            if (roadDirection != Vector3.zero)
             {
-                new Vector3(centerX, 0f, centerZ),
-                new Vector3(centerX - 3f, 0f, centerZ - 3f),
-                new Vector3(centerX + 3f, 0f, centerZ - 3f),
-                new Vector3(centerX - 3f, 0f, centerZ + 3f),
-                new Vector3(centerX + 3f, 0f, centerZ + 3f),
-                new Vector3(minX + 3f, 0f, minZ + 3f),
-                new Vector3(maxX - 3f, 0f, minZ + 3f),
-                new Vector3(minX + 3f, 0f, maxZ - 3f),
-                new Vector3(maxX - 3f, 0f, maxZ - 3f)
-            };
+                Vector3 right = new Vector3(roadDirection.z, 0f, -roadDirection.x);
+                anchor = center
+                         + roadDirection * ((maxZ - minZ) * 0.30f)
+                         + right * ((maxX - minX) * 0.20f);
 
-            for (int i = 0; i < candidates.Length; i++)
-            {
-                Vector3 candidate = candidates[i];
-                if (candidate.x < minX + 2f || candidate.x > maxX - 2f ||
-                    candidate.z < minZ + 2f || candidate.z > maxZ - 2f)
-                    continue;
-
-                if (!Physics.Raycast(candidate + Vector3.up * 2.5f, Vector3.down,
-                        out RaycastHit hit, 3.5f, ~0, QueryTriggerInteraction.Ignore))
-                    continue;
-
-                if (hit.point.y < -1f || hit.point.y > 1f)
-                    continue;
-
-                Collider[] overlaps = Physics.OverlapBox(
-                    candidate + Vector3.up * 1.0f,
-                    new Vector3(1.35f, 0.55f, 1.35f),
-                    Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
-
-                bool blocked = false;
-                for (int j = 0; j < overlaps.Length; j++)
-                {
-                    if (overlaps[j] == null)
-                        continue;
-                    if (overlaps[j].GetComponentInParent<FirstPersonController>() != null)
-                        continue;
-                    // Les PNJ se déplacent d'un client à l'autre : ils ne doivent
-                    // pas changer l'emplacement de la trappe, sinon les sous-sols
-                    // construits localement ne se superposent plus en multi.
-                    if (overlaps[j].GetComponentInParent<NPC_Info>() != null)
-                        continue;
-                    blocked = true;
-                    break;
-                }
-
-                if (!blocked)
-                    return new Vector3(candidate.x, 0f, candidate.z);
+                anchor = new Vector3(
+                    Mathf.Clamp(anchor.x, minX + margin, maxX - margin),
+                    0f,
+                    Mathf.Clamp(anchor.z, minZ + margin, maxZ - margin));
             }
 
-            return new Vector3(centerX, 0f, centerZ);
+            const float step = 1.4f;
+
+            List<Vector3> candidates = new List<Vector3>();
+            for (float x = minX + margin; x <= maxX - margin; x += step)
+            {
+                for (float z = minZ + margin; z <= maxZ - margin; z += step)
+                    candidates.Add(new Vector3(x, 0f, z));
+            }
+
+            if (candidates.Count == 0)
+                return center;
+
+            candidates.Sort((left, right) =>
+            {
+                float leftDistance = (left - anchor).sqrMagnitude;
+                float rightDistance = (right - anchor).sqrMagnitude;
+                return leftDistance.CompareTo(rightDistance);
+            });
+
+            // Premier passage : dégagement large (le cadre de la trappe fait
+            // 3,3 m de côté). Second passage : dégagement minimal.
+            float[] clearances = { 2.0f, 1.4f };
+            for (int pass = 0; pass < clearances.Length; pass++)
+            {
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    if (TryFloorPoint(candidates[i], out Vector3 floor, clearances[pass]))
+                        return floor;
+                }
+            }
+
+            return center;
+        }
+
+        /// <summary>
+        /// Direction horizontale allant du magasin vers la rue, déduite des
+        /// points d'apparition des clients (sur le trottoir devant la façade).
+        /// Vector3.zero si l'information manque.
+        /// </summary>
+        private static Vector3 GetRoadDirection(Vector3 center)
+        {
+            NPC_Manager manager = NPC_Manager.Instance;
+            GameObject spawnPoints = manager != null ? manager.spawnPointsOBJ : null;
+            if (spawnPoints == null || spawnPoints.transform.childCount == 0)
+                return Vector3.zero;
+
+            Vector3 sum = Vector3.zero;
+            int count = 0;
+            int childCount = spawnPoints.transform.childCount;
+
+            for (int i = 0; i < childCount; i++)
+            {
+                Transform child = spawnPoints.transform.GetChild(i);
+                if (child == null)
+                    continue;
+
+                // Le jeu tire ses points d'apparition dans [0, childCount - 1) :
+                // le dernier enfant sert de gabarit, on ne le compte pas.
+                if (i == childCount - 1 && count > 0)
+                    continue;
+
+                sum += child.position;
+                count++;
+            }
+
+            if (count == 0)
+                return Vector3.zero;
+
+            Vector3 spawn = sum / count;
+            Vector3 direction = new Vector3(spawn.x - center.x, 0f, spawn.z - center.z);
+            if (direction.sqrMagnitude < 1f)
+                return Vector3.zero;
+
+            return direction.normalized;
+        }
+
+        private static bool TryFloorPoint(
+            Vector3 candidate, out Vector3 floor, float clearance = 1.35f)
+        {
+            floor = Vector3.zero;
+
+            if (!Physics.Raycast(candidate + Vector3.up * 2.5f, Vector3.down,
+                    out RaycastHit hit, 3.5f, ~0, QueryTriggerInteraction.Ignore))
+                return false;
+
+            if (hit.point.y < -1f || hit.point.y > 1f || hit.normal.y < 0.4f)
+                return false;
+
+            Collider[] overlaps = Physics.OverlapBox(
+                candidate + Vector3.up * 1.0f,
+                new Vector3(clearance, 0.55f, clearance),
+                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < overlaps.Length; i++)
+            {
+                Collider other = overlaps[i];
+                if (other == null || other.isTrigger)
+                    continue;
+                if (other.GetComponentInParent<FirstPersonController>() != null)
+                    continue;
+                // Les PNJ se déplacent d'un client à l'autre : ils ne doivent
+                // pas changer l'emplacement de la trappe, sinon les sous-sols
+                // construits localement ne se superposent plus en multi.
+                if (other.GetComponentInParent<NPC_Info>() != null)
+                    continue;
+
+                return false;
+            }
+
+            floor = new Vector3(candidate.x, 0f, candidate.z);
+            return true;
         }
 
         private void SpawnNetworkObjects()
@@ -356,7 +459,6 @@ namespace ItemAdder.Underground
                 return;
 
             CreateHerbShelf();
-            CreateCheckout();
             SpawnPolice();
             RefreshProducts();
         }
@@ -367,6 +469,13 @@ namespace ItemAdder.Underground
                 return;
 
             NetworkSpawner spawner = GameData.Instance.GetComponent<NetworkSpawner>();
+
+            // Le jeu sauvegarde les meubles placés : une étagère à herbes
+            // laissée par une partie précédente (ou une ancienne version du
+            // mod) peut être restaurée dans la réserve. On la retire avant de
+            // replacer la nôtre, sinon elles s'accumulent.
+            Vector2Int leftoverStock = DestroyLeftoverShelves(spawner);
+
             Data_Container chosen = null;
             Data_Container preferred = null;
             Data_Container fallback = null;
@@ -415,8 +524,9 @@ namespace ItemAdder.Underground
 
             GameObject prefab = chosen.gameObject;
 
+            Vector3 shelfPosition = FindUpstairsShelfPosition();
             GameObject shelfObject = Object.Instantiate(
-                prefab, _layout.ShelfPosition, Quaternion.Euler(0f, 180f, 0f));
+                prefab, shelfPosition, Quaternion.Euler(0f, 180f, 0f));
             shelfObject.name = "Underground_HerbShelf";
             Data_Container dataContainer = shelfObject.GetComponent<Data_Container>();
             if (dataContainer == null)
@@ -464,83 +574,315 @@ namespace ItemAdder.Underground
             dataContainer.ActivateShelvesFromLoad();
             _shelf = dataContainer;
 
+            // Le stock de l'ancienne étagère (restaurée par la sauvegarde) est
+            // repris ici : on ne perd pas la récolte en cours.
+            if (leftoverStock.x > 0)
+                dataContainer.DebugAdd(0, UndergroundCatalog.ClassicProductId,
+                    Mathf.Clamp(leftoverStock.x, 1, 24));
+            if (leftoverStock.y > 0)
+                dataContainer.DebugAdd(2, UndergroundCatalog.PremiumProductId,
+                    Mathf.Clamp(leftoverStock.y, 1, 24));
+
             Plugin.Log.LogInfo(
-                $"[Souterrain] Étagère à herbes placée en {_layout.ShelfPosition} " +
+                $"[Souterrain] Étagère à herbes placée à l'étage en {shelfPosition} " +
                 $"({chosen.name}, classe {chosen.containerClass}, parent {chosen.parentIndex}, " +
                 $"standspot {(chosen.standSpot != null ? "oui" : "non")}).");
         }
 
-        private void CreateCheckout()
+        /// <summary>
+        /// Le rayon de vente doit être à l'étage : la salle du sous-sol ne sert
+        /// plus qu'à la culture. On le place à côté d'un rayon existant du
+        /// magasin (donc dans la surface de vente, jamais dans la réserve) et
+        /// sinon autour du centre du magasin.
+        /// </summary>
+        private Vector3 FindUpstairsShelfPosition()
         {
-            if (_checkout != null || _layout == null)
-                return;
+            Vector3 basePosition = GetSalesFloorCenter();
 
-            NetworkSpawner spawner = GameData.Instance.GetComponent<NetworkSpawner>();
-            GameObject prefab = null;
+            if (TryFindSpotBesideExistingShelf(out Vector3 besideShelf))
+                return besideShelf;
 
-            for (int i = 0; i < spawner.buildables.Length; i++)
+            Vector3[] offsets =
             {
-                GameObject candidate = spawner.buildables[i];
-                if (candidate == null)
+                Vector3.zero,
+                new Vector3(2.5f, 0f, 0f),
+                new Vector3(-2.5f, 0f, 0f),
+                new Vector3(0f, 0f, 2.5f),
+                new Vector3(0f, 0f, -2.5f),
+                new Vector3(3.5f, 0f, 3.5f),
+                new Vector3(-3.5f, 0f, 3.5f),
+                new Vector3(3.5f, 0f, -3.5f),
+                new Vector3(-3.5f, 0f, -3.5f)
+            };
+
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                Vector3 candidate = basePosition + offsets[i];
+                if (!TryFloorPoint(candidate, out Vector3 floor))
+                    continue;
+                if (IsNearStorageRack(floor))
+                    continue;
+                if (!HasShelfSpace(floor))
                     continue;
 
-                Data_Container data = candidate.GetComponent<Data_Container>();
-                if (data == null || data.containerClass != 99)
-                    continue;
-
-                // 12 = caisse automatique : elle utilise selfCheckoutOBJ, pas
-                // checkoutOBJ, et ne doit donc pas être placée ici.
-                if (data.containerID == 12)
-                    continue;
-
-                prefab = candidate;
-                if (data.parentIndex == 2)
-                    break;
+                return floor;
             }
 
-            if (prefab == null)
+            Plugin.Log.LogWarning(
+                "[Souterrain] Aucun emplacement libre pour le rayon à herbes à l'étage.");
+            return basePosition;
+        }
+
+        /// <summary>
+        /// Cherche un sol libre juste à côté d'un rayon déjà placé par le
+        /// joueur : le rayon à herbes reste ainsi dans la surface de vente et
+        /// pas dans la réserve.
+        /// </summary>
+        private bool TryFindSpotBesideExistingShelf(out Vector3 position)
+        {
+            position = Vector3.zero;
+
+            NPC_Manager manager = NPC_Manager.Instance;
+            GameObject shelves = manager != null ? manager.shelvesOBJ : null;
+            if (shelves == null || shelves.transform.childCount == 0)
+                return false;
+
+            Vector3 storeCenter = GetSalesFloorCenter();
+            Vector3 reference = Vector3.zero;
+            float bestDistance = float.MaxValue;
+
+            for (int i = 0; i < shelves.transform.childCount; i++)
             {
-                if (Time.time >= _nextPrefabWarning)
+                Transform shelf = shelves.transform.GetChild(i);
+                if (shelf == null || shelf.name.StartsWith("Underground_"))
+                    continue;
+
+                Data_Container container = shelf.GetComponent<Data_Container>();
+                if (container == null)
+                    continue;
+                if (container.containerClass == 99 || container.containerClass == 69)
+                    continue;
+
+                float distance = (shelf.position - storeCenter).sqrMagnitude;
+                if (distance >= bestDistance)
+                    continue;
+
+                bestDistance = distance;
+                reference = shelf.position;
+            }
+
+            if (reference == Vector3.zero)
+                return false;
+
+            // Deux rayons de recherche : tout contre un rayon existant, puis un
+            // peu plus loin s'il n'y a pas la place.
+            float[] radii = { 2.6f, 3.8f };
+            for (int pass = 0; pass < radii.Length; pass++)
+            {
+                for (int i = 0; i < 8; i++)
                 {
-                    _nextPrefabWarning = Time.time + 30f;
-                    Plugin.Log.LogWarning(
-                        "[Souterrain] Aucune caisse constructible trouvée. Candidats : " +
-                        DescribeBuildables(spawner));
+                    float angle = i * Mathf.PI / 4f;
+                    Vector3 candidate = reference + new Vector3(
+                        Mathf.Cos(angle) * radii[pass], 0f, Mathf.Sin(angle) * radii[pass]);
+
+                    if (!TryFloorPoint(candidate, out Vector3 floor, 0.9f))
+                        continue;
+                    if (IsNearStorageRack(floor))
+                        continue;
+                    if (!HasShelfSpace(floor))
+                        continue;
+
+                    position = floor;
+                    return true;
                 }
-                return;
             }
 
-            GameObject checkoutObject = Object.Instantiate(
-                prefab, _layout.CheckoutPosition, Quaternion.Euler(0f, 180f, 0f));
-            checkoutObject.name = "Underground_Checkout";
-            Data_Container dataContainer = checkoutObject.GetComponent<Data_Container>();
-            if (dataContainer == null)
+            return false;
+        }
+
+        /// <summary>
+        /// Vrai si le point est collé à un meuble de réserve (les étagères de
+        /// stockage), pour ne jamais y cacher le rayon à herbes.
+        /// </summary>
+        private static bool IsNearStorageRack(Vector3 position)
+        {
+            NPC_Manager manager = NPC_Manager.Instance;
+            GameObject storage = manager != null ? manager.storageOBJ : null;
+            if (storage == null)
+                return false;
+
+            for (int i = 0; i < storage.transform.childCount; i++)
             {
-                Object.Destroy(checkoutObject);
-                return;
+                Transform rack = storage.transform.GetChild(i);
+                if (rack == null)
+                    continue;
+
+                Vector3 delta = rack.position - position;
+                delta.y = 0f;
+                if (delta.sqrMagnitude < 20f)
+                    return true;
             }
 
-            // Même principe pour la caisse : elle doit figurer dans la liste
-            // des caisses connues pour que les clients viennent y payer.
-            Transform checkoutParent = NPC_Manager.Instance.checkoutOBJ != null
-                ? NPC_Manager.Instance.checkoutOBJ.transform
-                : null;
-            if (checkoutParent == null && dataContainer.parentIndex >= 0 &&
-                dataContainer.parentIndex < spawner.levelPropsOBJ.transform.childCount)
-                checkoutParent = spawner.levelPropsOBJ.transform.GetChild(dataContainer.parentIndex);
-            if (checkoutParent == null)
-                checkoutParent = spawner.levelPropsOBJ.transform.GetChild(2);
-            checkoutObject.transform.SetParent(checkoutParent, true);
+            return false;
+        }
 
-            NetworkServer.Spawn(checkoutObject);
-            _checkout = dataContainer;
-            Plugin.Log.LogInfo(
-                $"[Souterrain] Caisse placée en {_layout.CheckoutPosition} ({prefab.name}).");
+        private static Vector3 GetSalesFloorCenter()
+        {
+            Builder_Main builder = Object.FindFirstObjectByType<Builder_Main>();
+            if (builder != null &&
+                builder.buildXLimits.y > builder.buildXLimits.x &&
+                builder.buildZLimits.y > builder.buildZLimits.x)
+            {
+                return new Vector3(
+                    (builder.buildXLimits.x + builder.buildXLimits.y) * 0.5f, 0f,
+                    (builder.buildZLimits.x + builder.buildZLimits.y) * 0.5f);
+            }
+
+            UndergroundManager manager = Instance;
+            if (manager != null && manager._layout != null)
+                return new Vector3(
+                    manager._layout.ShelfPosition.x, 0f, manager._layout.ShelfPosition.z);
+
+            return Vector3.zero;
+        }
+
+        /// <summary>
+        /// Supprime les étagères à herbes laissées par une session précédente
+        /// (le jeu sauvegarde les meubles placés, y compris la nôtre) avant
+        /// d'en créer une neuve. On repère ces vestiges à deux signes : leur nom
+        /// ou le fait qu'elles contiennent nos deux variétés d'herbe.
+        /// </summary>
+        private static Vector2Int DestroyLeftoverShelves(NetworkSpawner spawner)
+        {
+            Vector2Int stock = Vector2Int.zero;
+
+            if (spawner == null || spawner.levelPropsOBJ == null)
+                return stock;
+
+            int classicId = UndergroundCatalog.ClassicProductId;
+            int premiumId = UndergroundCatalog.PremiumProductId;
+
+            Transform root = spawner.levelPropsOBJ.transform;
+            List<GameObject> leftovers = new List<GameObject>();
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform group = root.GetChild(i);
+                if (group == null)
+                    continue;
+
+                for (int j = 0; j < group.childCount; j++)
+                {
+                    Transform child = group.GetChild(j);
+                    if (child == null)
+                        continue;
+
+                    if (child.name.StartsWith("Underground_HerbShelf") ||
+                        ContainsUndergroundProduct(child, classicId, premiumId))
+                    {
+                        leftovers.Add(child.gameObject);
+                        stock = Vector2Int.Max(stock, ReadHerbStock(child, classicId, premiumId));
+                    }
+                }
+            }
+
+            for (int i = 0; i < leftovers.Count; i++)
+            {
+                GameObject leftover = leftovers[i];
+                if (leftover == null)
+                    continue;
+
+                Plugin.Log.LogInfo(
+                    "[Souterrain] Ancienne étagère à herbes retirée du décor " +
+                    $"({leftover.transform.position}).");
+
+                NetworkIdentity identity = leftover.GetComponent<NetworkIdentity>();
+                if (NetworkServer.active && identity != null && identity.netId != 0)
+                    NetworkServer.Destroy(leftover);
+                else
+                    Object.Destroy(leftover);
+            }
+
+            return stock;
+        }
+
+        private static bool ContainsUndergroundProduct(
+            Transform candidate, int classicId, int premiumId)
+        {
+            if (classicId < 0 && premiumId < 0)
+                return false;
+
+            Data_Container container = candidate.GetComponent<Data_Container>();
+            if (container == null || container.productInfoArray == null)
+                return false;
+
+            for (int i = 0; i < container.productInfoArray.Length; i += 2)
+            {
+                int productId = container.productInfoArray[i];
+                if (productId < 0)
+                    continue;
+                if (productId == classicId || productId == premiumId)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Relève le stock d'herbes d'une étagère restaurée par la sauvegarde,
+        /// pour le remettre sur celle qu'on recrée au bon endroit.
+        /// </summary>
+        private static Vector2Int ReadHerbStock(Transform shelf, int classicId, int premiumId)
+        {
+            Data_Container container = shelf.GetComponent<Data_Container>();
+            if (container == null || container.productInfoArray == null)
+                return Vector2Int.zero;
+
+            int classic = 0;
+            int premium = 0;
+
+            for (int i = 0; i + 1 < container.productInfoArray.Length; i += 2)
+            {
+                int productId = container.productInfoArray[i];
+                int quantity = container.productInfoArray[i + 1];
+                if (quantity <= 0)
+                    continue;
+
+                if (productId == classicId)
+                    classic = Mathf.Max(classic, quantity);
+                else if (productId == premiumId)
+                    premium = Mathf.Max(premium, quantity);
+            }
+
+            return new Vector2Int(classic, premium);
+        }
+
+        private static bool HasShelfSpace(Vector3 position)
+        {
+            Collider[] overlaps = Physics.OverlapBox(
+                position + Vector3.up * 1.3f,
+                new Vector3(2.2f, 1.3f, 1.2f),
+                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < overlaps.Length; i++)
+            {
+                Collider other = overlaps[i];
+                if (other == null || other.isTrigger)
+                    continue;
+                if (other.GetComponentInParent<FirstPersonController>() != null)
+                    continue;
+                if (other.GetComponentInParent<NPC_Info>() != null)
+                    continue;
+
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
         /// Résumé des meubles constructibles, utile dans le log quand aucun
-        /// rayon/caisse n'est reconnu : on voit immédiatement les classes et
+        /// rayon n'est reconnu : on voit immédiatement les classes et
         /// les parents renvoyés par le jeu.
         /// </summary>
         private static string DescribeBuildables(NetworkSpawner spawner)
@@ -857,7 +1199,7 @@ namespace ItemAdder.Underground
                     plot.Watered = false;
                     plot.Covered = false;
                     plot.RefreshVisual();
-                    Notify($"Récolte : {amount} unités ajoutées au rayon du sous-sol.", requester);
+                    Notify($"Récolte : {amount} unités ajoutées au rayon à herbes de l'étage.", requester);
                     MarkDirty();
                     break;
                 }
@@ -881,13 +1223,6 @@ namespace ItemAdder.Underground
             _doorOpen = open;
             if (_door != null)
                 _door.SetOpen(open);
-
-            if (IsServer && _checkout != null)
-            {
-                bool shouldClose = !open;
-                if (_checkout.isCheckoutClosed != shouldClose)
-                    _checkout.CmdCloseCheckout();
-            }
 
             if (IsServer)
             {
@@ -1187,6 +1522,94 @@ namespace ItemAdder.Underground
             SetPoliceDestination(_patrolPoints[0]);
         }
 
+        /// <summary>
+        /// Filet de sécurité : si le joueur local tombe sous la dalle du sous-sol
+        /// (décor supprimé, ancienne trappe, trou dans le sol), on le repose
+        /// près de la trappe au lieu de le laisser coincé dans le vide.
+        /// </summary>
+        private void TickFallRecovery()
+        {
+            if (Time.time < _nextFallCheck)
+                return;
+
+            _nextFallCheck = Time.time + 1f;
+
+            if (_layout == null)
+                return;
+
+            FirstPersonController controller = FirstPersonController.Instance;
+            if (controller == null)
+                return;
+
+            if (controller.transform.position.y > _layout.FloorY - 3.5f)
+                return;
+
+            Vector3 target = _layout.Hatch + Vector3.up * 0.35f;
+            FirstPersonTransform transformComponent =
+                controller.GetComponent<FirstPersonTransform>();
+            if (transformComponent != null)
+                transformComponent.coroutineActivator(target, 0f);
+            else
+                controller.transform.position = target;
+
+            Plugin.Log.LogWarning(
+                "[Souterrain] Joueur tombé sous le décor : remonté près de la trappe.");
+        }
+
+        /// <summary>
+        /// Le jeu restaure les meubles sauvegardés, y compris notre étagère à
+        /// herbes : selon l'ordre de chargement, un doublon peut apparaitre
+        /// après notre construction (souvent dans la réserve). On le retire au
+        /// fil de l'eau, sans toucher à l'étagère réellement utilisée.
+        /// </summary>
+        private void TickLeftoverCleanup()
+        {
+            if (!IsServer || _shelf == null || _layout == null)
+                return;
+            if (Time.time < _nextLeftoverCheck)
+                return;
+
+            _nextLeftoverCheck = Time.time + 5f;
+
+            GameData data = GameData.Instance;
+            NetworkSpawner spawner = data != null ? data.GetComponent<NetworkSpawner>() : null;
+            if (spawner == null || spawner.levelPropsOBJ == null)
+                return;
+
+            int classicId = UndergroundCatalog.ClassicProductId;
+            int premiumId = UndergroundCatalog.PremiumProductId;
+            Transform root = spawner.levelPropsOBJ.transform;
+            Transform current = _shelf.transform;
+
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform group = root.GetChild(i);
+                if (group == null)
+                    continue;
+
+                for (int j = group.childCount - 1; j >= 0; j--)
+                {
+                    Transform child = group.GetChild(j);
+                    if (child == null || child == current)
+                        continue;
+
+                    if (!child.name.StartsWith("Underground_HerbShelf") &&
+                        !ContainsUndergroundProduct(child, classicId, premiumId))
+                        continue;
+
+                    Plugin.Log.LogInfo(
+                        "[Souterrain] Doublon d'étagère à herbes retiré " +
+                        $"({child.position}).");
+
+                    NetworkIdentity identity = child.GetComponent<NetworkIdentity>();
+                    if (identity != null && identity.netId != 0)
+                        NetworkServer.Destroy(child.gameObject);
+                    else
+                        Object.Destroy(child.gameObject);
+                }
+            }
+        }
+
         private void RefreshProducts()
         {
             if (Time.time < _nextProductRefresh)
@@ -1194,6 +1617,76 @@ namespace ItemAdder.Underground
 
             _nextProductRefresh = Time.time + 0.75f;
             UndergroundCatalog.RefreshAvailability();
+        }
+
+        /// <summary>
+        /// Quand un rayon se vide en cours de journée, les clients déjà partis
+        /// avec l'herbe dans leur liste continueraient à la chercher, puis
+        /// diraient qu'elle n'est pas là. On la retire de leur liste : seuls les
+        /// clients arrivés après un réassort la demandent.
+        /// </summary>
+        private void PurgeUnavailableDemand()
+        {
+            if (!IsServer || Time.time < _nextDemandPurge)
+                return;
+
+            _nextDemandPurge = Time.time + 2f;
+
+            int classicId = UndergroundCatalog.ClassicProductId;
+            int premiumId = UndergroundCatalog.PremiumProductId;
+            bool classicMissing = classicId >= 0 && !HasClassicStock;
+            bool premiumMissing = premiumId >= 0 && !HasPremiumStock;
+            if (!classicMissing && !premiumMissing)
+                return;
+
+            NPC_Info[] customers = Object.FindObjectsByType<NPC_Info>(FindObjectsSortMode.None);
+            for (int i = 0; i < customers.Length; i++)
+            {
+                NPC_Info customer = customers[i];
+                if (customer == null || customer.productsIDToBuy == null ||
+                    customer.productsIDToBuy.Count == 0)
+                    continue;
+
+                List<int> wanted = customer.productsIDToBuy;
+                bool changed = false;
+                for (int j = wanted.Count - 1; j >= 0; j--)
+                {
+                    int id = wanted[j];
+                    if ((classicMissing && id == classicId) ||
+                        (premiumMissing && id == premiumId))
+                    {
+                        wanted.RemoveAt(j);
+                        changed = true;
+                    }
+                }
+
+                if (changed && wanted.Count == 0)
+                    AddFallbackDemand(wanted, classicId, premiumId);
+            }
+        }
+
+        /// <summary>
+        /// Une liste de courses vide ferait planter la machine à états du
+        /// client : on y remet un produit encore présent en rayon.
+        /// </summary>
+        private static void AddFallbackDemand(List<int> wanted, int classicId, int premiumId)
+        {
+            ProductListing listing = ProductListing.Instance;
+            if (listing == null || listing.availableProducts == null ||
+                listing.availableProducts.Count == 0)
+                return;
+
+            int attempts = Mathf.Min(listing.availableProducts.Count, 16);
+            for (int i = 0; i < attempts; i++)
+            {
+                int candidate = listing.availableProducts[
+                    UnityEngine.Random.Range(0, listing.availableProducts.Count)];
+                if (candidate < 0 || candidate == classicId || candidate == premiumId)
+                    continue;
+
+                wanted.Add(candidate);
+                return;
+            }
         }
 
         private int GetShelfQuantity(int row)
@@ -1526,13 +2019,6 @@ namespace ItemAdder.Underground
                 _doorOpen = doorOpen;
                 if (_door != null)
                     _door.SetOpen(doorOpen);
-                if (IsServer && _checkout != null)
-                {
-                    bool shouldClose = !doorOpen;
-                    if (_checkout.isCheckoutClosed != shouldClose)
-                        _checkout.CmdCloseCheckout();
-                }
-
                 RefreshProducts();
                 Plugin.Log.LogInfo($"[Souterrain] État chargé depuis {Path.GetFileName(path)}.");
             }
@@ -1566,14 +2052,6 @@ namespace ItemAdder.Underground
                     Object.Destroy(_shelf.gameObject);
             }
 
-            if (_checkout != null)
-            {
-                if (NetworkServer.active)
-                    NetworkServer.Destroy(_checkout.gameObject);
-                else
-                    Object.Destroy(_checkout.gameObject);
-            }
-
             if (_layout != null && _layout.Root != null)
                 Object.Destroy(_layout.Root);
 
@@ -1581,7 +2059,6 @@ namespace ItemAdder.Underground
             _plots = null;
             _door = null;
             _shelf = null;
-            _checkout = null;
             _patrolPoints = null;
             _built = false;
             _networkReady = false;
