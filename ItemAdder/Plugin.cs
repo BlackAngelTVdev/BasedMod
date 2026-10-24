@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using ItemAdder.UI;
 using ItemAdder.Underground;
 using Mirror;
 using UnityEngine;
@@ -14,7 +15,7 @@ namespace ItemAdder
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "ItemAdder";
-        public const string PluginVersion = "1.3.4";
+        public const string PluginVersion = "1.3.5";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
@@ -75,6 +76,10 @@ namespace ItemAdder
                 Object.DontDestroyOnLoad(underground);
                 underground.AddComponent<UndergroundManager>();
             }
+
+            GameObject escapeMenu = new GameObject("ItemAdder_EscapeMenu");
+            Object.DontDestroyOnLoad(escapeMenu);
+            escapeMenu.AddComponent<EscapeMenuSaveButton>();
 
             Log.LogInfo($"{PluginName} v{PluginVersion} chargé.");
         }

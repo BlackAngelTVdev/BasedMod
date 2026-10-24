@@ -109,7 +109,7 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.d
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Au démarrage, puis au chargement d'une partie Classic, tu dois y voir :
 
 ```
-ItemAdder v1.3.4 chargé.
+ItemAdder v1.3.5 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
 [Souterrain] Produits illicites ajoutés : Herbe classique (id 383) et Herbe premium (id 384).
 [Souterrain] Sous-sol prêt.
@@ -168,7 +168,7 @@ Le sous-sol est construit automatiquement sous le magasin dès que le layout **C
 #### Jouer en multijoueur
 Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cultures, la trappe, le stock, la caisse et l'amende, et chaque client construit le même décor localement.
 
-1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.3.4) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.3.5) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
 2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
 3. Dans le log de l'hôte, vérifie : `[Souterrain] Sous-sol prêt.`, `[Souterrain] Étagère à herbes placée`, `[Souterrain] Caisse placée`, `[Souterrain] Policier spawn`.
 4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : la trappe, les parcelles, les bâches et la caisse sont alors pilotées par l'hôte.
@@ -176,6 +176,9 @@ Le sous-sol est prévu pour le mode multi : l'hôte est autoritaire pour les cul
 Chaque joueur peut planter, arroser, bâcher et récolter ; l'action est envoyée à l'hôte, qui applique le résultat et renvoie l'état. Le joueur qui agit reçoit aussi ses propres messages (graine achetée, parcelle arrosée, etc.).
 
 > Un joueur **sans le mod** ne verra ni la trappe ni le sous-sol. Ne mélange pas les versions : le jeu peut se désynchroniser si les tableaux de produits ou le nombre de parcelles diffèrent. L'hôte **et les clients** doivent garder `ActiverSousSol = true`.
+
+### Menu Échap
+Un bouton **Sauvegarder et menu** est ajouté dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ». Il sauvegarde la partie puis revient au menu principal, sans quitter le jeu.
 
 ### Raccourcis F5 / F6
 En solo ou en tant qu'hôte :
