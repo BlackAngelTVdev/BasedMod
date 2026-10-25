@@ -16,7 +16,7 @@ Le projet contient deux programmes indépendants, qui peuvent être utilisés s�
 
 | Composant | Rôle | Version |
 | :--- | :--- | :---: |
-| `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.4.2 |
+| `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.5.3 |
 | `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.1 |
 
 Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInEx + Harmony) et ajoute ses données aux tableaux du jeu en mémoire. Aucun asset externe n'est nécessaire, les modèles 3D des nouveaux produits sont générés par code.
@@ -128,7 +128,7 @@ La fenêtre s'ouvre sur un fond de magasin flouté, avec un **menu latéral** à
 | Page | Contenu |
 | :--- | :--- |
 | **Accueil** | Dossier du jeu + `Parcourir...`, état de l'installation (version du mod, fichier, dernière release, BepInEx, badge « Prêt / Mise à jour / Erreur »), boutons d'installation, modules au lancement, carte « dernière release » et gros bouton **Lancer le jeu** |
-| **Actualités** | Les dernières releases GitHub, texte Markdown mis en forme (titres, gras, listes, code, liens) avec date et auteur, bouton **Rafraîchir** |
+| **Actualités** | Les dernières releases GitHub, texte Markdown mis en forme (titres, gras, listes, code, liens) avec date et auteur, bouton **Rafraîchir**. La molette fait défiler la page, même au-dessus du texte |
 | **Journal** | Toutes les opérations, les versions, les erreurs réseau et les chemins utilisés, avec **Effacer** |
 
 Les actions de la page Accueil :
@@ -233,13 +233,12 @@ Si tu préfères installer un DLL déjà compilé, copie simplement `ItemAdder.d
 Démarre Supermarket Together, puis vérifie `BepInEx\LogOutput.log`. Au démarrage, puis au chargement d'une partie Classic, tu dois y voir :
 
 ```text
-ItemAdder v1.4.2 chargé.
+ItemAdder v1.5.3 chargé.
 [Tabac] Rayon ajouté : 44 produits, palier 55 ('Tabac I'), groupe 19, produits 339-382. Prérequis : palier 23 ('Fruits de mer I').
 [Interface] Bouton « Sauvegarder et menu » ajouté au menu Échap.
 [Souterrain] Produits illicites ajoutés : Herbe classique (id 383) et Herbe premium (id 384).
 [Souterrain] Sous-sol construit sous le magasin : trappe (5.1, 27.0), salle 18x16, 6 parcelles.
 [Souterrain] Sous-sol prêt.
-[Souterrain] Étagère à herbes placée à l'étage en (10.8, -4.2, 21.3).
 [Souterrain] Policier spawn (netId 33).
 ```
 
@@ -392,7 +391,7 @@ En multijoueur client, les raccourcis sont ignorés : les points et les fonds do
 Pour choisir l'emplacement exact de la trappe au lieu de le deviner :
 
 1. lance une partie et attends `[Souterrain] Sous-sol prêt.` ;
-2. **F9** active le mode placement : un fantôme translucide du sous-sol (cadre de trappe, salle 18 × 16 m, rampe, 6 parcelles, rayon) suit le point que tu vises. Il est dessiné par une caméra de superposition, donc **visible à travers les murs** ; la trappe réelle est masquée pendant le réglage ;
+2. **F9** active le mode placement : un fantôme translucide du sous-sol (cadre de trappe, salle 18 × 16 m, puits d'échelle, 6 parcelles, contact) suit le point que tu vises. Il est dessiné par une caméra de superposition, donc **visible à travers les murs** ; la trappe réelle est masquée pendant le réglage ;
 3. vise le sol à l'endroit voulu : l'encadré affiche X / Y / Z et prévient si la salle dépasse des limites du magasin ;
 4. **F10** met le jeu en pause pour vérifier l'emplacement : le fantôme et l'encadré des coordonnées restent affichés, le temps est figé (les clients et la police ne bougent plus) ;
 5. un **second F10** relance le jeu et écrit la position dans `BepInEx\LogOutput.log` sous la forme
@@ -404,7 +403,7 @@ Le gel avant écriture est un réglage temporaire de mise au point, activé par 
 Pour rendre l'emplacement définitif, remplace la valeur de `HatchOverride` dans `ItemAdder/Underground/UndergroundManager.cs` par le `Vector3` relevé, puis recompile. `Vector3.zero` conserve le placement automatique.
 
 ### Multijoueur
-1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.3) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.5.3) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
 2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
 3. Dans le log de l'hôte, vérifie `[Souterrain] Sous-sol prêt.` et `[Souterrain] Policier spawn`.
 4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : trappe, parcelles, bâches et stock sont pilotés par l'hôte.
@@ -508,7 +507,8 @@ BasedMod/
 │       ├── RoundedCheckBox.cs
 │       ├── RoundedPanel.cs
 │       ├── RoundedButton.cs
-│       └── RoundedTextBox.cs
+│       ├── RoundedTextBox.cs
+│       └── WheelThroughRichTextBox.cs
 └── ItemAdder/
     ├── Plugin.cs
     ├── Patches/
@@ -516,6 +516,7 @@ BasedMod/
     │   ├── TobaccoPatches.cs
     │   └── EmployeeRestockPatch.cs
     ├── Products/
+    │   ├── BoxSizes.cs
     │   └── ProductMeshes.cs
     ├── Tobacco/
     │   ├── TobaccoManager.cs
@@ -529,6 +530,7 @@ BasedMod/
     │   ├── UndergroundNetwork.cs
     │   ├── UndergroundNetworkPatches.cs
     │   ├── UndergroundPatches.cs
+    │   ├── UndergroundPlacementMode.cs
     │   ├── UndergroundSavePatches.cs
     │   ├── BasementDoor.cs
     │   ├── CannabisPlot.cs
