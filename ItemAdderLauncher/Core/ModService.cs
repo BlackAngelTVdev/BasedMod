@@ -10,6 +10,27 @@ public static class ModService
     public const string LegacyModFileName = "MonSupermarketMod.dll";
     public const string BepInExVersion = "5.4.23.5";
 
+    /// <summary>Version de Unity Doorstop livrée avec le zip BepInEx 5.4.23.5.</summary>
+    public const string DoorstopVersion = "4.5.0";
+
+    /// <summary>
+    /// Fichiers que Doorstop et BepInEx doivent trouver pour que le mod soit
+    /// chargé. Vérifier uniquement <c>BepInEx\core\BepInEx.dll</c> laissait passer
+    /// une installation partielle (dossiers recréés, DLL manquantes) : le jeu
+    /// démarrait alors en vanilla sans le moindre message.
+    /// </summary>
+    private static readonly string[] BepInExRequiredFiles =
+    {
+        "winhttp.dll",
+        "doorstop_config.ini",
+        ".doorstop_version",
+        "BepInEx/core/BepInEx.dll",
+        "BepInEx/core/BepInEx.Preloader.dll",
+        "BepInEx/core/BepInEx.Harmony.dll",
+        "BepInEx/core/0Harmony.dll",
+        "BepInEx/core/Mono.Cecil.dll"
+    };
+
     private static readonly HttpClient DownloadClient = CreateDownloadClient();
 
     public static InstalledMod? GetInstalledMod(string? gamePath)
@@ -64,13 +85,36 @@ public static class ModService
     }
 
     /// <summary>
-    /// BepInEx est utilisable quand son cœur est présent : c'est le fichier que
-    /// Doorstop charge au démarrage du jeu.
+    /// Fichiers manquants pour que BepInEx charge réellement le mod. Liste vide
+    /// seulement quand l'installation est complète.
     /// </summary>
+    public static IReadOnlyList<string> GetMissingBepInExFiles(string? gamePath)
+    {
+        if (string.IsNullOrWhiteSpace(gamePath) || !Directory.Exists(gamePath))
+        {
+            return BepInExRequiredFiles.ToList();
+        }
+
+        return BepInExRequiredFiles
+            .Where(relative => !File.Exists(Path.Combine(gamePath, relative)))
+            .ToList();
+    }
+
     public static bool IsBepInExInstalled(string? gamePath)
     {
         return !string.IsNullOrWhiteSpace(gamePath)
-            && File.Exists(Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"));
+            && GetMissingBepInExFiles(gamePath).Count == 0;
+    }
+
+    /// <summary>
+    /// Vrai quand le dossier BepInEx existe mais qu'il manque des fichiers :
+    /// c'est l'état produit par une extraction interrompue.
+    /// </summary>
+    public static bool IsBepInExPartial(string? gamePath)
+    {
+        return !string.IsNullOrWhiteSpace(gamePath)
+            && Directory.Exists(Path.Combine(gamePath, "BepInEx"))
+            && !IsBepInExInstalled(gamePath);
     }
 
     public static async Task EnsureBepInExAsync(
@@ -85,16 +129,41 @@ public static class ModService
                 "Le dossier sélectionné ne contient pas Supermarket Together.exe.");
         }
 
-        string corePath = Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll");
-        if (File.Exists(corePath))
-        {
-            return;
-        }
-
         if (!allowGameRunning && GameLocator.IsGameRunning())
         {
             throw new InvalidOperationException(
                 "Ferme Supermarket Together avant d'installer BepInEx.");
+        }
+
+        // Dossiers utilisés par BepInEx : les créer évite qu'un plugin échoue
+        // faute de dossier, mais ce n'est pas l'installation elle-même.
+        Directory.CreateDirectory(Path.Combine(gamePath, "BepInEx"));
+        Directory.CreateDirectory(Path.Combine(gamePath, "BepInEx", "core"));
+        Directory.CreateDirectory(Path.Combine(gamePath, "BepInEx", "config"));
+        Directory.CreateDirectory(GameLocator.GetPluginsPath(gamePath));
+
+        IReadOnlyList<string> missing = GetMissingBepInExFiles(gamePath);
+        if (missing.Count == 0)
+        {
+            EnsureDoorstopEnabled(gamePath, progress);
+            return;
+        }
+
+        progress?.Report(missing.Count == BepInExRequiredFiles.Length
+            ? $"BepInEx absent : installation complète de la version {BepInExVersion}."
+            : "BepInEx incomplet : réinstallation complète (manquant : " +
+              string.Join(", ", missing) + ").");
+
+        // Des DLL de core à moitié écrites obligent à repartir d'un dossier vide,
+        // pour ne pas mélanger deux états. Un fichier absent ailleurs (winhttp.dll,
+        // doorstop_config.ini...) laisse au contraire le core intact : l'extraction
+        // le réécrit, et un téléchargement qui échoue ne détruit rien d'utile.
+        bool coreIncomplete = missing.Any(relative =>
+            relative.StartsWith("BepInEx/core/", StringComparison.OrdinalIgnoreCase));
+        string coreDirectory = Path.Combine(gamePath, "BepInEx", "core");
+        if (coreIncomplete && Directory.Exists(coreDirectory))
+        {
+            TryClearDirectory(coreDirectory);
         }
 
         string zipName = $"BepInEx_win_x64_{BepInExVersion}.zip";
@@ -103,26 +172,139 @@ public static class ModService
         string tempZip = Path.Combine(Path.GetTempPath(), "ItemAdderLauncher", zipName);
 
         Directory.CreateDirectory(Path.GetDirectoryName(tempZip)!);
+        TryDeleteFile(tempZip);
 
         try
         {
             progress?.Report($"Téléchargement de BepInEx {BepInExVersion}...");
             await DownloadFileAsync(url, tempZip, progress, cancellationToken).ConfigureAwait(false);
+            EnsureZipArchive(tempZip);
 
             progress?.Report("Extraction de BepInEx...");
-            ZipFile.ExtractToDirectory(tempZip, gamePath, overwriteFiles: true);
+            ExtractZip(tempZip, gamePath);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                "Impossible d'extraire BepInEx dans le dossier du jeu. " +
+                "Ferme le jeu et l'antivirus, vérifie que le dossier n'est pas en lecture seule, " +
+                "puis relance. Détail : " + ex.Message,
+                ex);
         }
         finally
         {
             TryDeleteFile(tempZip);
         }
 
-        Directory.CreateDirectory(GameLocator.GetPluginsPath(gamePath));
-
-        if (!File.Exists(corePath))
+        missing = GetMissingBepInExFiles(gamePath);
+        if (missing.Count > 0)
         {
             throw new InvalidOperationException(
-                "Installation de BepInEx incomplète : BepInEx\\core\\BepInEx.dll est absent.");
+                "Installation de BepInEx incomplète après extraction. Fichiers absents : " +
+                string.Join(", ", missing) + ". " +
+                "Un antivirus a peut-être mis winhttp.dll en quarantaine : autorise le dossier " +
+                "du jeu puis clique à nouveau sur « Lancer le jeu ».");
+        }
+
+        EnsureDoorstopEnabled(gamePath, progress);
+        progress?.Report($"BepInEx {BepInExVersion} installé : {BepInExRequiredFiles.Length} fichiers vérifiés.");
+    }
+
+    /// <summary>
+    /// Doorstop doit rester actif : un doorstop_config.ini désactivé (ou absent)
+    /// démarre le jeu en vanilla même quand toutes les DLL sont en place.
+    /// </summary>
+    private static void EnsureDoorstopEnabled(string gamePath, IProgress<string>? progress)
+    {
+        string configPath = Path.Combine(gamePath, "doorstop_config.ini");
+
+        if (!File.Exists(configPath))
+        {
+            return;
+        }
+
+        try
+        {
+            string text = File.ReadAllText(configPath);
+            string fixedText = System.Text.RegularExpressions.Regex.Replace(
+                text,
+                "(?im)^\\s*enabled\\s*=\\s*false\\s*$",
+                "enabled = true");
+
+            if (!string.Equals(text, fixedText, StringComparison.Ordinal))
+            {
+                File.WriteAllText(configPath, fixedText);
+                progress?.Report("Doorstop était désactivé dans doorstop_config.ini : réactivé.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            progress?.Report("Attention : doorstop_config.ini n'a pas pu être vérifié (" +
+                ex.Message + ").");
+        }
+    }
+
+    private static void EnsureZipArchive(string path)
+    {
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length < 1024)
+        {
+            throw new InvalidDataException(
+                $"Le téléchargement de BepInEx est incomplet ({info.Length} octets). " +
+                "Vérifie la connexion puis relance.");
+        }
+
+        using FileStream stream = File.OpenRead(path);
+        if (stream.ReadByte() != 'P' || stream.ReadByte() != 'K')
+        {
+            throw new InvalidDataException(
+                "Le fichier téléchargé n'est pas une archive ZIP (GitHub a peut-être " +
+                "renvoyé une page d'erreur). Réessaie plus tard.");
+        }
+    }
+
+    private static void ExtractZip(string archivePath, string destinationRoot)
+    {
+        string root = Path.GetFullPath(destinationRoot);
+        if (!root.EndsWith(Path.DirectorySeparatorChar))
+        {
+            root += Path.DirectorySeparatorChar;
+        }
+
+        using ZipArchive archive = ZipFile.OpenRead(archivePath);
+
+        foreach (ZipArchiveEntry entry in archive.Entries)
+        {
+            string target = Path.GetFullPath(Path.Combine(root, entry.FullName));
+            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                // Entrée hors du dossier du jeu : ignorée (archive piégée).
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(target);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            entry.ExtractToFile(target, overwrite: true);
+        }
+    }
+
+    private static void TryClearDirectory(string path)
+    {
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.Delete(file);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Fichiers verrouillés (jeu ouvert) : l'extraction signalera l'erreur.
         }
     }
 

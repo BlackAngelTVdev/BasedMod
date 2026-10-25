@@ -2032,8 +2032,10 @@ public sealed class MainForm : Form
 
             if (!ModService.IsBepInExInstalled(gamePath))
             {
-                Log($"BepInEx manquant : installation avant le lancement " +
-                    $"({ModService.BepInExVersion})...");
+                Log(ModService.IsBepInExPartial(gamePath)
+                    ? "BepInEx incomplet : réinstallation complète avant le lancement..."
+                    : $"BepInEx manquant : installation avant le lancement " +
+                      $"({ModService.BepInExVersion})...");
             }
 
             await ModService.EnsureBepInExAsync(gamePath, progress, _lifetime.Token);
@@ -2359,10 +2361,17 @@ public sealed class MainForm : Form
             : $"({_installedMod.FileName})";
 
         bool bepInExInstalled = ModService.IsBepInExInstalled(gamePath);
+        bool bepInExPartial = !bepInExInstalled && ModService.IsBepInExPartial(gamePath);
         _bepInExValue.Text = bepInExInstalled
             ? $"● Installé ({ModService.BepInExVersion})"
-            : "● Absent";
-        _bepInExValue.ForeColor = bepInExInstalled ? Theme.Green : Theme.TextMuted;
+            : bepInExPartial
+                ? "● Incomplet"
+                : "● Absent";
+        _bepInExValue.ForeColor = bepInExInstalled
+            ? Theme.Green
+            : bepInExPartial
+                ? Theme.Accent
+                : Theme.TextMuted;
 
         if (!checkRelease)
         {

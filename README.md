@@ -17,7 +17,7 @@ Le projet contient deux programmes indépendants, qui peuvent être utilisés s�
 | Composant | Rôle | Version |
 | :--- | :--- | :---: |
 | `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.5.3 |
-| `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.2 |
+| `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.3 |
 
 Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInEx + Harmony) et ajoute ses données aux tableaux du jeu en mémoire. Aucun asset externe n'est nécessaire, les modèles 3D des nouveaux produits sont générés par code.
 
@@ -50,7 +50,7 @@ Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInE
 
 ### Le launcher
 - ✅ **Détection automatique** du dossier Steam (registre, `libraryfolders.vdf`, chemins classiques), avec sélection manuelle possible.
-- ✅ **Installation de BepInEx 5.4.23.5 x64** s'il est absent.
+- ✅ **Installation de BepInEx 5.4.23.5 x64** s'il est absent, avec vérification des fichiers réellement nécessaires au chargement du mod (`winhttp.dll`, `doorstop_config.ini`, `.doorstop_version`, `BepInEx.dll`, `BepInEx.Preloader.dll`, `BepInEx.Harmony.dll`, `0Harmony.dll`, `Mono.Cecil.dll`). Un dossier BepInEx vide, à moitié extrait ou désactivé dans `doorstop_config.ini` est réparé avant le lancement.
 - ✅ **Plug & play** : au premier lancement, BepInEx et le mod s'installent tout seuls depuis la dernière release GitHub, et le launcher se copie dans le profil utilisateur avec ses raccourcis. Un mod plus ancien que la release est mis à jour automatiquement au démarrage suivant.
 - ✅ **Installation / mise à jour du mod** depuis la dernière release GitHub, ou depuis un DLL local.
 - ✅ **Cases à cocher « Modules au lancement »** : rayon tabac, sous-sol clandestin, réassort intelligent — écrites dans le `.cfg` du mod avant chaque lancement.

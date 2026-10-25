@@ -20,10 +20,17 @@ internal static class Diagnostics
                 ? "Mod installé : aucun"
                 : $"Mod installé : {installed.FileName} {installed.Version}");
 
-            string core = gamePath is null
-                ? "BepInEx : jeu non détecté"
-                : $"BepInEx : {File.Exists(Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"))}";
-            lines.Add(core);
+            if (gamePath is null)
+            {
+                lines.Add("BepInEx : jeu non détecté");
+            }
+            else
+            {
+                IReadOnlyList<string> missing = ModService.GetMissingBepInExFiles(gamePath);
+                lines.Add(missing.Count == 0
+                    ? "BepInEx : installé (tous les fichiers présents)"
+                    : "BepInEx : incomplet, manquant " + string.Join(", ", missing));
+            }
 
             try
             {
@@ -73,14 +80,92 @@ internal static class Diagnostics
                 .GetAwaiter()
                 .GetResult();
 
-            string core = Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll");
-            bool coreExists = File.Exists(core);
+            bool installed = ModService.IsBepInExInstalled(gamePath);
             bool pluginsExists = Directory.Exists(GameLocator.GetPluginsPath(gamePath));
+            IReadOnlyList<string> missing = ModService.GetMissingBepInExFiles(gamePath);
 
-            lines.Add($"BepInEx.dll : {coreExists}");
+            lines.Add($"Installation complète : {installed}");
             lines.Add($"Dossier plugins : {pluginsExists}");
 
-            if (!coreExists || !pluginsExists)
+            if (missing.Count > 0)
+            {
+                lines.Add("Manquant : " + string.Join(", ", missing));
+            }
+
+            if (!installed || !pluginsExists)
+            {
+                exitCode = 1;
+            }
+
+            // Réparation d'une installation partielle : dossiers présents mais
+            // fichiers absents, l'état qui faisait démarrer le jeu sans mod.
+            File.Delete(Path.Combine(gamePath, "winhttp.dll"));
+            File.Delete(Path.Combine(gamePath, "BepInEx", "core", "BepInEx.Preloader.dll"));
+
+            bool partialDetected = ModService.IsBepInExPartial(gamePath)
+                && !ModService.IsBepInExInstalled(gamePath);
+            lines.Add($"État partiel détecté : {partialDetected}");
+
+            ModService
+                .EnsureBepInExAsync(
+                    gamePath,
+                    cancellationToken: CancellationToken.None,
+                    allowGameRunning: true)
+                .GetAwaiter()
+                .GetResult();
+
+            bool repaired = ModService.IsBepInExInstalled(gamePath);
+            lines.Add($"Réparation d'une installation partielle : {repaired}");
+
+            if (!partialDetected || !repaired)
+            {
+                exitCode = 1;
+            }
+
+            // Doorstop désactivé : le jeu démarrerait en vanilla malgré des DLL
+            // complètes. Le launcher doit remettre `enabled = true`.
+            string doorstopPath = Path.Combine(gamePath, "doorstop_config.ini");
+            File.WriteAllText(
+                doorstopPath,
+                File.ReadAllText(doorstopPath).Replace("enabled = true", "enabled = false"));
+
+            ModService
+                .EnsureBepInExAsync(
+                    gamePath,
+                    cancellationToken: CancellationToken.None,
+                    allowGameRunning: true)
+                .GetAwaiter()
+                .GetResult();
+
+            bool doorstopEnabled = File
+                .ReadAllText(doorstopPath)
+                .Contains("enabled = true", StringComparison.Ordinal);
+            lines.Add($"Doorstop réactivé : {doorstopEnabled}");
+
+            if (!doorstopEnabled)
+            {
+                exitCode = 1;
+            }
+
+            // Core intact, seul le chargeur manque : l'extraction doit réécrire
+            // par-dessus les fichiers existants sans vider le dossier core.
+            string harmonyPath = Path.Combine(gamePath, "BepInEx", "core", "0Harmony.dll");
+            File.Delete(Path.Combine(gamePath, "winhttp.dll"));
+
+            ModService
+                .EnsureBepInExAsync(
+                    gamePath,
+                    cancellationToken: CancellationToken.None,
+                    allowGameRunning: true)
+                .GetAwaiter()
+                .GetResult();
+
+            bool loaderRestored = File.Exists(Path.Combine(gamePath, "winhttp.dll"))
+                && File.Exists(harmonyPath)
+                && ModService.IsBepInExInstalled(gamePath);
+            lines.Add($"Chargeur restauré sans vider core : {loaderRestored}");
+
+            if (!loaderRestored)
             {
                 exitCode = 1;
             }
