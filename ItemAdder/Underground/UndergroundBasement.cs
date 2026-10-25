@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -22,7 +22,6 @@ namespace ItemAdder.Underground
         internal CannabisPlot[] Plots;
         internal BasementDoor Door;
         internal Collider FloorCollider;
-        internal Collider RampCollider;
         internal NavMeshLink Link;
         internal float FloorY;
         internal float MinX;
@@ -94,7 +93,7 @@ namespace ItemAdder.Underground
 
             CreateWalls(root.transform, center);
             CreateCeiling(root.transform, center, hatch);
-            CreateStaircase(root.transform, hatch, center, layout);
+            CreateShaftAndLadder(root.transform, hatch, center, layout);
 
             // Lumière et ambiance
             CreateLamp(root.transform, center + new Vector3(-5.5f, 0f, -3.5f));
@@ -262,9 +261,9 @@ namespace ItemAdder.Underground
         {
             float halfW = RoomWidth * 0.5f;
             float halfD = RoomDepth * 0.5f;
-            float openingHalf = 1.8f;
-            float openingFront = hatch.z - 0.8f;
-            float openingBack = hatch.z - 8.4f;
+            float openingHalf = 1.5f;
+            float openingFront = hatch.z + 1.5f;
+            float openingBack = hatch.z - 1.5f;
             float y = CeilingY;
 
             CreateBox("CeilingWest", parent,
@@ -298,87 +297,86 @@ namespace ItemAdder.Underground
             }
         }
 
-        private static void CreateStaircase(
+        /// <summary>
+        /// Puits de trappe : un trou carré dans le plafond, quatre parois entre
+        /// le plafond et la dalle du magasin (pour ne plus voir à travers le
+        /// plafond), et une échelle verticale jusqu'au sol. La descente et la
+        /// remontée restent des interactions (E) : plus d'escalier au milieu de
+        /// la pièce.
+        /// </summary>
+        private static void CreateShaftAndLadder(
             Transform parent, Vector3 hatch, Vector3 center, BasementLayout layout)
         {
-            Vector3 top = new Vector3(hatch.x, -0.25f, hatch.z - 1.0f);
-            Vector3 bottom = new Vector3(hatch.x, FloorY, hatch.z - 7.6f);
-            layout.RampTop = top;
-            layout.RampBottom = bottom;
+            const float holeHalf = 1.5f;
+            const float shaftHalf = 1.6f;
 
-            float horizontal = Mathf.Abs(top.z - bottom.z);
-            float drop = Mathf.Abs(top.y - bottom.y);
-            float length = Mathf.Sqrt(horizontal * horizontal + drop * drop);
-            float angle = Mathf.Atan2(drop, horizontal) * Mathf.Rad2Deg;
+            // Arrivée en bas, juste sous la trappe.
+            Vector3 arrival = new Vector3(hatch.x, FloorY + 0.05f, hatch.z - 1.6f);
+            layout.StairExit = arrival;
+            layout.RampBottom = new Vector3(hatch.x, FloorY, arrival.z);
+            layout.RampTop = new Vector3(hatch.x, CeilingY + 0.4f, hatch.z - 1.2f);
 
-            GameObject ramp = CreateBox(
-                "Ramp", parent,
-                new Vector3(top.x, (top.y + bottom.y) * 0.5f - 0.1f, (top.z + bottom.z) * 0.5f),
-                new Vector3(3.8f, 0.2f, length), Concrete, true);
-            ramp.transform.rotation = Quaternion.Euler(angle, 0f, 0f);
-            layout.RampCollider = ramp.GetComponent<Collider>();
+            // Parois du puits : de la dalle du magasin au plafond de la salle.
+            float shaftBottom = CeilingY + 0.15f;
+            float shaftTop = 0f;
+            float shaftHeight = Mathf.Max(0.2f, shaftTop - shaftBottom);
+            float shaftY = (shaftTop + shaftBottom) * 0.5f;
 
-            // Les marches sont purement visuelles : le joueur et les PNJ marchent
-            // sur la rampe, ce qui évite les blocages de navigation.
-            const int steps = 26;
-            for (int i = 0; i < steps; i++)
-            {
-                float t = i / (float)(steps - 1);
-                Vector3 position = Vector3.Lerp(top, bottom, t);
-                position.y += 0.06f;
-                CreateBox("Step" + i, parent, position,
-                    new Vector3(3.6f, 0.14f, 0.42f), Concrete, false);
-            }
+            CreateBox("ShaftNorth", parent,
+                new Vector3(hatch.x, shaftY, hatch.z + shaftHalf),
+                new Vector3(shaftHalf * 2f + 0.4f, shaftHeight, 0.2f), ConcreteDark, true);
+            CreateBox("ShaftSouth", parent,
+                new Vector3(hatch.x, shaftY, hatch.z - shaftHalf),
+                new Vector3(shaftHalf * 2f + 0.4f, shaftHeight, 0.2f), ConcreteDark, true);
+            CreateBox("ShaftWest", parent,
+                new Vector3(hatch.x - shaftHalf, shaftY, hatch.z),
+                new Vector3(0.2f, shaftHeight, shaftHalf * 2f), ConcreteDark, true);
+            CreateBox("ShaftEast", parent,
+                new Vector3(hatch.x + shaftHalf, shaftY, hatch.z),
+                new Vector3(0.2f, shaftHeight, shaftHalf * 2f), ConcreteDark, true);
 
-            // Garde-corps bas qui suivent la pente. Les deux murs de 3,3 m de
-            // haut qui tenaient ce rôle coupaient la salle en deux au milieu
-            // (la trappe est au centre de la salle en X).
+            // Rebord du trou, côté salle.
+            float lipY = CeilingY - 0.2f;
             for (int side = -1; side <= 1; side += 2)
             {
-                GameObject parapet = CreateBox($"StairParapet{side}", parent,
-                    new Vector3(top.x + side * 2.05f,
-                        (top.y + bottom.y) * 0.5f + 0.35f,
-                        (top.z + bottom.z) * 0.5f),
-                    new Vector3(0.16f, 1.25f, length + 0.4f), ConcreteDark, true);
-                parapet.transform.rotation = Quaternion.Euler(angle, 0f, 0f);
+                CreateBox($"ShaftLipX{side}", parent,
+                    new Vector3(hatch.x + side * holeHalf, lipY, hatch.z - 0.2f),
+                    new Vector3(0.16f, 0.16f, holeHalf * 2f), Metal, false,
+                    BasementSurface.Metal, new Vector2(1f, 1f));
+                CreateBox($"ShaftLipZ{side}", parent,
+                    new Vector3(hatch.x, lipY, hatch.z + side * holeHalf - 0.2f),
+                    new Vector3(holeHalf * 2f, 0.16f, 0.16f), Metal, false,
+                    BasementSurface.Metal, new Vector2(1f, 1f));
             }
 
-            CreateBox("StairLanding", parent,
-                new Vector3(bottom.x, FloorY - 0.15f, bottom.z - 1.3f),
-                new Vector3(3.8f, 0.3f, 2.6f), Concrete, true);
+            // Échelle : deux montants et des barreaux, dans l'axe du trou.
+            float ladderZ = hatch.z - 1.2f;
+            float ladderTop = -0.35f;
+            float ladderHeight = ladderTop - FloorY;
 
-            // Arrivée de la trappe et point de remontée : le joueur est déposé
-            // ici (et non au milieu de la rampe, où il pouvait se coincer), et
-            // remonte avec E en s'y tenant.
-            Vector3 exitPoint = new Vector3(bottom.x, FloorY + 0.05f, bottom.z - 1.9f);
-            layout.StairExit = exitPoint;
-            CreateLabel(parent, exitPoint + Vector3.up * 1.55f, "[E] Remonter");
-
-            CreateBox("ExitGlow", parent, exitPoint + Vector3.up * 0.03f,
-                new Vector3(1.6f, 0.04f, 1.6f), new Color(0.30f, 0.42f, 0.30f), false);
-
-            // Garde-corps : purement visuels, seule la rampe porte la collision.
             for (int side = -1; side <= 1; side += 2)
-            {                    Vector3 railCenter = new Vector3(
-                        top.x + side * 1.9f,
-                    (top.y + bottom.y) * 0.5f + 0.95f,
-                    (top.z + bottom.z) * 0.5f);
-
-                GameObject rail = CreateBox($"Handrail{side}", parent, railCenter,
-                    new Vector3(0.07f, 0.07f, length), Color.white, false,
+            {
+                CreateBox($"LadderRail{side}", parent,
+                    new Vector3(hatch.x + side * 0.36f, FloorY + ladderHeight * 0.5f, ladderZ),
+                    new Vector3(0.08f, ladderHeight, 0.08f), Metal, false,
                     BasementSurface.Metal, new Vector2(0.3f, 8f));
-                rail.transform.rotation = Quaternion.Euler(angle, 0f, 0f);
-
-                for (int post = 0; post <= 3; post++)
-                {
-                    float t = post / 3f;
-                    Vector3 position = Vector3.Lerp(top, bottom, t);
-                    CreateBox($"HandrailPost{side}_{post}", parent,
-                        new Vector3(railCenter.x, position.y + 0.45f, position.z),
-                        new Vector3(0.06f, 0.95f, 0.06f), Color.white, false,
-                        BasementSurface.Metal, new Vector2(0.2f, 1f));
-                }
             }
+
+            int rungs = Mathf.Max(2, Mathf.RoundToInt(ladderHeight / 0.36f));
+            for (int i = 1; i < rungs; i++)
+            {
+                float y = FloorY + i * (ladderHeight / rungs);
+                CreateBox($"LadderRung{i}", parent,
+                    new Vector3(hatch.x, y, ladderZ),
+                    new Vector3(0.78f, 0.06f, 0.06f), Color.white, false,
+                    BasementSurface.Metal, new Vector2(1f, 0.2f));
+            }
+
+            // Repère d'arrivée et de remontée.
+            CreateBox("ExitGlow", parent, new Vector3(hatch.x, FloorY + 0.03f, arrival.z - 0.4f),
+                new Vector3(1.8f, 0.04f, 1.8f), new Color(0.30f, 0.42f, 0.30f), false);
+
+            CreateLabel(parent, arrival + Vector3.up * 1.6f, "[E] Remonter");
         }
 
         private static void CreateLamp(Transform parent, Vector3 position, float intensity = 1.15f)

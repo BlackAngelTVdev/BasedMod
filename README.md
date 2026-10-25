@@ -51,6 +51,7 @@ Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInE
 ### Le launcher
 - ✅ **Détection automatique** du dossier Steam (registre, `libraryfolders.vdf`, chemins classiques), avec sélection manuelle possible.
 - ✅ **Installation de BepInEx 5.4.23.5 x64** s'il est absent.
+- ✅ **Plug & play** : au premier lancement, BepInEx et le mod s'installent tout seuls depuis la dernière release GitHub, et le launcher se copie dans le profil utilisateur avec ses raccourcis. Un mod plus ancien que la release est mis à jour automatiquement au démarrage suivant.
 - ✅ **Installation / mise à jour du mod** depuis la dernière release GitHub, ou depuis un DLL local.
 - ✅ **Cases à cocher « Modules au lancement »** : rayon tabac, sous-sol clandestin, réassort intelligent — écrites dans le `.cfg` du mod avant chaque lancement.
 - ✅ **Lancement en vanilla** pour une session sans BepInEx, sans rien désinstaller.
@@ -120,7 +121,9 @@ Le launcher est une **application Windows native** (C# WinForms), pas un script 
 dist\ItemAdderLauncher.exe
 ```
 
-Double-clique dessus. La fenêtre s'ouvre sur un fond de magasin flouté, avec un **menu latéral** à gauche et trois pages :
+Double-clique dessus. Au premier lancement, le launcher se contente de faire le nécessaire : il trouve le jeu par Steam, installe **BepInEx** s'il manque, télécharge la **dernière release du mod**, se copie dans le profil utilisateur et crée les raccourcis. Rien à cliquer, rien à configurer.
+
+La fenêtre s'ouvre sur un fond de magasin flouté, avec un **menu latéral** à gauche et trois pages :
 
 | Page | Contenu |
 | :--- | :--- |
@@ -153,7 +156,7 @@ Ce fichier contient le chemin du jeu et les trois booléens des modules. Si aucu
 L'écriture dans le `.cfg` est chirurgicale : seules les clés concernées changent, les commentaires BepInEx et les autres réglages (amende, durée de pousse, multiplicateur) sont conservés. Le lancement vanilla ne modifie ni le `.cfg` ni les modules.
 
 #### Installation sur le PC (icône, menu Démarrer, désinstallation)
-L'exécutable peut rester un simple fichier portable, mais le launcher sait aussi s'installer comme une vraie application : bouton **« Installer sur le PC »** en haut à droite de la fenêtre, également proposé au premier démarrage.
+L'exécutable peut rester un simple fichier portable, mais le launcher s'installe aussi comme une vraie application : au premier démarrage, il se copie tout seul et crée ses raccourcis (le bouton **« Installer sur le PC »** / **« Désinstaller le launcher »** reste disponible en bas du menu).
 
 - Copie de l'exécutable dans `%LOCALAPPDATA%\Programs\ItemAdder\ItemAdderLauncher.exe` — **aucun droit administrateur** n'est nécessaire. Si tu installes depuis un build multi-fichiers (`bin\...`), le `.dll`, le `.deps.json` et le `.runtimeconfig.json` sont copiés avec lui : sans eux, la copie installée ne démarrerait pas (et exigerait le .NET Desktop Runtime). L'exécutable publié en single-file n'en a pas besoin.
 - Raccourci **sur le Bureau** et dans le **menu Démarrer** (`Programs\ItemAdder`), avec l'icône du programme (un caddie ambre, générée pour cette application).
@@ -315,8 +318,8 @@ Le sous-sol est construit automatiquement sous le magasin dès que le layout **C
 La descente ne dépend d'aucun déclencheur physique (c'était la cause des trappes impossibles à emprunter) :
 
 - **E** sur la trappe fermée : l'ouvrir (un message rappelle qu'il faut appuyer une seconde fois pour descendre).
-- **E** sur la trappe ouverte : descendre — le joueur est déposé **sur le palier du bas**, dans la salle, face aux marches. Il n'atterrit plus au milieu de la rampe, où il pouvait glisser et se coincer dans la pente.
-- **E** sur le palier du bas, sous l'inscription `[E] Remonter` : remonter sur le plancher du magasin.
+- **E** sur la trappe ouverte : descendre — le joueur est déposé **au pied de l'échelle**, sous la trappe, face à la salle. Plus d'escalier au milieu de la pièce : le puits se résume à un trou carré dans le plafond, ses quatre parois et une échelle verticale, ce qui évite aussi de voir à travers le plafond.
+- **E** au pied de l'échelle, sous l'inscription `[E] Remonter` : remonter sur le plancher du magasin.
 - **F** sur la trappe ouverte : la refermer.
 - La trappe est aussi un lien de navigation : la police peut l'emprunter quand elle est ouverte.
 
@@ -331,7 +334,7 @@ La salle de 18 × 16 m est meublée comme un vrai local clandestin, sans aucune 
 - **Culture** : cuve d'eau, tuyau d'arrosage, arrosoir et sacs de terre ; marquage jaune au sol autour de la zone de culture.
 - **Séchage** : séchoir en bois à trois barres avec têtes suspendues, le long du mur d'entrée.
 - **Local technique** : gaine de ventilation avec grilles, extracteur mural, tableau électrique et câbles.
-- **Détails** : garde-corps le long de l'escalier, tapis caoutchouc, grille d'évacuation, flaque, bidons, seau et balai.
+- **Détails** : tapis caoutchouc au pied de l'échelle, grille d'évacuation, flaque, bidons, seau et balai.
 
 Tout est décoratif : les interactions, les six parcelles, la trappe, le contact et la police ne changent pas. Les gros éléments (rack, établi, cuve, séchoir) ont une collision ; les petits détails n'en ont pas pour ne jamais bloquer le joueur ou les PNJ.
 

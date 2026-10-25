@@ -12,9 +12,6 @@ public sealed class LauncherSettings
     public bool? Underground { get; set; }
 
     public bool? Restock { get; set; }
-
-    // true = l'installation du launcher a déjà été proposée au démarrage.
-    public bool? InstallOffered { get; set; }
 }
 
 public static class SettingsStore
@@ -65,13 +62,6 @@ public static class SettingsStore
         settings.Tobacco = tobacco;
         settings.Underground = underground;
         settings.Restock = restock;
-        Save(settings);
-    }
-
-    public static void MarkInstallOffered()
-    {
-        LauncherSettings settings = Load();
-        settings.InstallOffered = true;
         Save(settings);
     }
 

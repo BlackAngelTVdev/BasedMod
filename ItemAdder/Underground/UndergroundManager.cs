@@ -132,8 +132,7 @@ namespace ItemAdder.Underground
                     out RaycastHit hit, 2.0f, ~0, QueryTriggerInteraction.Ignore))
                 return false;
 
-            return hit.collider == manager._layout.FloorCollider ||
-                   hit.collider == manager._layout.RampCollider;
+            return hit.collider == manager._layout.FloorCollider;
         }
 
         internal bool HasClassicStock => _stock[0] > 0;
@@ -1186,7 +1185,8 @@ namespace ItemAdder.Underground
                 ? _layout.StairExit
                 : _layout.RampBottom + new Vector3(0f, 0.1f, -1.6f);
 
-            MovePlayer(player, target, 0f);
+            // Yaw 180 : on arrive sous la trappe en regardant la salle.
+            MovePlayer(player, target, 180f);
 
             Plugin.Log.LogInfo(
                 $"[Souterrain] Descente par la trappe vers ({target.x:0.0}, " +

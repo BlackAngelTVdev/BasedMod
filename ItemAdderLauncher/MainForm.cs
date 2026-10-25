@@ -87,6 +87,7 @@ public sealed class MainForm : Form
 
     private LauncherPage _page = LauncherPage.Home;
     private bool _busy;
+    private bool _autoSetupRan;
     private bool _suppressModuleEvents;
     private bool _launcherUpdateChecked;
     private InstalledMod? _installedMod;
@@ -1527,7 +1528,7 @@ public sealed class MainForm : Form
         });
         y += 25;
 
-        var body = new RichTextBox
+        var body = new WheelThroughRichTextBox
         {
             Location = new Point(20, y),
             Width = inner,
@@ -1802,7 +1803,121 @@ public sealed class MainForm : Form
             "Recherche du jeu et vérification des releases...",
             () => RefreshStatusAsync(checkRelease: true));
 
-        await OfferInstallAsync();
+        await EnsureInstalledAsync();
+        await AutoSetupAsync();
+    }
+
+    /// <summary>
+    /// Installe le launcher sur le PC dès le premier démarrage, sans question :
+    /// c'est ce qui rend l'application « tu télécharges, tu double-cliques, c'est prêt ».
+    /// Le bouton du menu permet toujours de la retirer ensuite.
+    /// </summary>
+    private Task EnsureInstalledAsync()
+    {
+        if (LauncherInstaller.IsInstalled)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            LauncherInstaller.Install(new Progress<string>(Log));
+            UpdateInstallButton();
+            Log("Launcher installé sur ce PC : icône sur le Bureau, menu Démarrer et « Applications installées ».");
+        }
+        catch (Exception ex)
+        {
+            Log("Installation du launcher impossible : " + ex.Message);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Première configuration automatique : BepInEx quand il manque, puis le mod
+    /// depuis la dernière release GitHub quand il est absent ou plus ancien.
+    /// Aucune question : le but est qu'un joueur n'ait rien à cliquer.
+    /// </summary>
+    private async Task AutoSetupAsync()
+    {
+        if (_autoSetupRan || IsDisposed)
+        {
+            return;
+        }
+
+        _autoSetupRan = true;
+
+        string? gamePath = GameLocator.FindGamePath(_pathInput.Value);
+        if (gamePath is null)
+        {
+            Log("Installation automatique : jeu non détecté. " +
+                "Utilise « Parcourir » pour indiquer le dossier de Supermarket Together.");
+            return;
+        }
+
+        bool bepInExInstalled = File.Exists(
+            Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"));
+        Version? latest = _latestRelease is null
+            ? null
+            : VersionHelper.Parse(_latestRelease.TagName);
+        bool needsMod = _installedMod is null;
+        bool needsUpdate = _installedMod?.ParsedVersion is not null
+            && latest is not null
+            && _installedMod.ParsedVersion < latest;
+
+        if (bepInExInstalled && !needsMod && !needsUpdate)
+        {
+            Log("Installation déjà à jour : BepInEx et le mod sont en place.");
+            return;
+        }
+
+        if (GameLocator.IsGameRunning())
+        {
+            Log("Installation automatique reportée : ferme Supermarket Together puis relance le launcher.");
+            return;
+        }
+
+        SetBusy(true);
+        SetState("Installation", Theme.Blue);
+
+        try
+        {
+            var progress = new Progress<string>(Log);
+
+            if (!bepInExInstalled)
+            {
+                Log($"BepInEx absent : installation automatique de la version {ModService.BepInExVersion}...");
+                await ModService.EnsureBepInExAsync(gamePath, progress, _lifetime.Token);
+                Log("BepInEx installé.");
+            }
+
+            if (_latestRelease is not null && (needsMod || needsUpdate))
+            {
+                Log($"Installation automatique de la release {_latestRelease.TagName}...");
+                InstalledMod installed = await ModService.InstallFromReleaseAsync(
+                    gamePath,
+                    _latestRelease,
+                    progress,
+                    _lifetime.Token);
+                Log($"Mod installé automatiquement : {installed.FileName} ({installed.Version}).");
+            }
+
+            await RefreshStatusAsync(checkRelease: false);
+            Log("Installation automatique terminée : le jeu est prêt à être lancé.");
+        }
+        catch (OperationCanceledException)
+        {
+            // Fermeture du launcher pendant l'installation : rien à signaler.
+        }
+        catch (Exception ex)
+        {
+            Log("Installation automatique impossible : " + ex.Message);
+            SetState("Erreur", Theme.Red);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private async void BrowseButton_Click(object? sender, EventArgs e)
@@ -2035,42 +2150,6 @@ public sealed class MainForm : Form
                 : "Installe le launcher sur ce PC : raccourci sur le bureau, menu Démarrer " +
                   "et entrée dans « Applications installées ». Les mises à jour remplaceront " +
                   "cette installation.");
-    }
-
-    private async Task OfferInstallAsync()
-    {
-        if (LauncherInstaller.IsInstalled)
-        {
-            return;
-        }
-
-        LauncherSettings settings = SettingsStore.Load();
-        if (settings.InstallOffered == true)
-        {
-            return;
-        }
-
-        SettingsStore.MarkInstallOffered();
-
-        DialogResult answer = MessageBox.Show(
-            this,
-            "Installer ItemAdder Launcher sur ce PC ?\n\n" +
-            "- une icône sur le bureau\n" +
-            "- un raccourci dans le menu Démarrer\n" +
-            "- une entrée dans « Applications installées »\n\n" +
-            "Les mises à jour remplaceront automatiquement cette installation.\n" +
-            "Oui = installer maintenant, Non = garder le launcher en fichier portable.",
-            "Installer le launcher",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-
-        if (answer != DialogResult.Yes)
-        {
-            Log("Installation refusée : « Installer sur le PC » reste disponible dans le menu de gauche.");
-            return;
-        }
-
-        await RunOperationAsync("Installation du launcher sur ce PC...", InstallSelfAsync);
     }
 
     private async Task InstallLatestReleaseAsync()

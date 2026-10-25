@@ -395,19 +395,11 @@ namespace ItemAdder.Underground
                 new Vector3(RoomWidth * 0.5f, wallY, 0f),
                 new Vector3(0.45f, RoomHeight, RoomDepth), _structureMaterial);
 
-            // Rampe d'accès (même pente que CreateStaircase).
-            Vector3 rampTop = new Vector3(0f, -0.25f - FloorY, 2.5f);
-            Vector3 rampBottom = new Vector3(0f, 0f, -4.1f);
-            float horizontal = Mathf.Abs(rampTop.z - rampBottom.z);
-            float drop = Mathf.Abs(rampTop.y - rampBottom.y);
-            float length = Mathf.Sqrt(horizontal * horizontal + drop * drop);
-            float angle = Mathf.Atan2(drop, horizontal) * Mathf.Rad2Deg;
-
-            GameObject ramp = CreatePart(_roomGroup.transform, "Ramp",
-                new Vector3(0f, (rampTop.y + rampBottom.y) * 0.5f - 0.1f,
-                    (rampTop.z + rampBottom.z) * 0.5f),
-                new Vector3(3.2f, 0.2f, length), _structureMaterial);
-            ramp.transform.localRotation = Quaternion.Euler(angle, 0f, 0f);
+            // Puits de trappe : un simple trou dans le plafond, l'échelle et la
+            // descente n'occupent plus le milieu de la pièce.
+            CreatePart(_roomGroup.transform, "Shaft",
+                new Vector3(0f, RoomHeight - 0.45f, 0f),
+                new Vector3(3f, 0.5f, 3f), _hatchMaterial);
 
             // Parcelles.
             float[] plotX = { -6.3f, -3.6f };
@@ -422,9 +414,9 @@ namespace ItemAdder.Underground
                 }
             }
 
-            // Emplacement du rayon de vente.
-            CreatePart(_roomGroup.transform, "Shelf",
-                new Vector3(5.7f, 0.7f, -2.2f), new Vector3(2.6f, 1.4f, 0.9f), _structureMaterial);
+            // Contact du marché noir.
+            CreatePart(_roomGroup.transform, "Contact",
+                new Vector3(5.4f, 0.45f, -4.2f), new Vector3(2f, 0.9f, 1f), _plotMaterial);
         }
 
         private GameObject CreatePart(
