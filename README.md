@@ -17,7 +17,7 @@ Le projet contient deux programmes indépendants, qui peuvent être utilisés s�
 | Composant | Rôle | Version |
 | :--- | :--- | :---: |
 | `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.4.2 |
-| `ItemAdderLauncher.exe` | L'application Windows qui détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lance le jeu et gère les mises à jour. | 1.3.0 |
+| `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.1 |
 
 Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInEx + Harmony) et ajoute ses données aux tableaux du jeu en mémoire. Aucun asset externe n'est nécessaire, les modèles 3D des nouveaux produits sont générés par code.
 
@@ -54,7 +54,10 @@ Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInE
 - ✅ **Installation / mise à jour du mod** depuis la dernière release GitHub, ou depuis un DLL local.
 - ✅ **Cases à cocher « Modules au lancement »** : rayon tabac, sous-sol clandestin, réassort intelligent — écrites dans le `.cfg` du mod avant chaque lancement.
 - ✅ **Lancement en vanilla** pour une session sans BepInEx, sans rien désinstaller.
-- ✅ **Mise à jour du launcher lui-même**, proposée au démarrage avec confirmation.
+- ✅ **Interface avec menu latéral et fond de magasin flouté** : tableau de bord (état, actions, modules, dernière release, gros bouton de lancement), page **Actualités** qui récupère les releases GitHub et met leur Markdown en forme, et page **Journal**.
+- ✅ **Boutons dessinés à la main** : coins arrondis transparents, dégradé et liseré sur les actions principales, survol et appui animés, icônes Fluent alignées sur le texte. Les rangées gardent un écart fixe, sans bouton collé ni rogné.
+- ✅ **Installation sur le PC** : copie dans le profil utilisateur, icône sur le Bureau, raccourci dans le menu Démarrer et entrée dans « Applications installées » — désinstallation depuis Windows ou depuis le launcher.
+- ✅ **Mise à jour du launcher lui-même**, proposée au démarrage avec confirmation ; elle cible la copie installée, donc les raccourcis restent valides.
 - ✅ **Journal d'activité** dans la fenêtre, et modes de diagnostic en ligne de commande.
 
 ## 🔍 Comment ça marche
@@ -117,20 +120,27 @@ Le launcher est une **application Windows native** (C# WinForms), pas un script 
 dist\ItemAdderLauncher.exe
 ```
 
-Double-clique dessus. La fenêtre se compose de haut en bas :
+Double-clique dessus. La fenêtre s'ouvre sur un fond de magasin flouté, avec un **menu latéral** à gauche et trois pages :
+
+| Page | Contenu |
+| :--- | :--- |
+| **Accueil** | Dossier du jeu + `Parcourir...`, état de l'installation (version du mod, fichier, dernière release, BepInEx, badge « Prêt / Mise à jour / Erreur »), boutons d'installation, modules au lancement, carte « dernière release » et gros bouton **Lancer le jeu** |
+| **Actualités** | Les dernières releases GitHub, texte Markdown mis en forme (titres, gras, listes, code, liens) avec date et auteur, bouton **Rafraîchir** |
+| **Journal** | Toutes les opérations, les versions, les erreurs réseau et les chemins utilisés, avec **Effacer** |
+
+Les actions de la page Accueil :
 
 | Élément | Rôle |
 | :--- | :--- |
-| **Dossier du jeu** + `Parcourir...` | Chemin de Supermarket Together ; détecté automatiquement, modifiable |
-| **État de l'installation** | Version du mod installé, fichier, dernière release GitHub, présence de BepInEx, badge « Prêt / Mise à jour / Erreur » |
 | **Installer / Mettre à jour** | Télécharge l'asset du mod depuis la dernière release (jeu fermé obligatoire) |
 | **Vérifier les mises à jour** | Recompare le mod installé et la dernière release |
-| **Installer un DLL local...** | Installe un build compilé, pour tester ou réparer |
+| **Installer un DLL** | Installe un build compilé, pour tester ou réparer |
 | **Lancer le jeu** | Applique les modules cochés puis démarre le jeu avec BepInEx |
-| **Lancer en vanilla** | Démarre le jeu avec `DOORSTOP_DISABLE=TRUE` : BepInEx et les plugins ne se chargent pas pour cette session |
-| **Ouvrir BepInEx** | Ouvre `BepInEx\plugins` dans l'Explorateur |
+| **Vanilla** | Démarre le jeu avec `DOORSTOP_DISABLE=TRUE` : BepInEx et les plugins ne se chargent pas pour cette session |
+| **BepInEx** | Ouvre `BepInEx\plugins` dans l'Explorateur |
 | **Modules au lancement** | Cases à cocher « Rayon Tabac », « Sous-sol clandestin », « Réassort intelligent » |
-| **Journal** | Toutes les opérations, les versions, les erreurs réseau et les chemins utilisés |
+| **Installer sur le PC** (en bas du menu) | Installe le launcher : icône sur le Bureau, menu Démarrer, entrée « Applications installées ». Le bouton devient **Désinstaller le launcher** une fois l'installation faite |
+| **Releases GitHub** (en bas du menu) | Ouvre la page des releases dans le navigateur |
 
 Les modules cochés sont écrits dans le `.cfg` **au moment du clic sur « Lancer le jeu »**, pas avant : tu peux donc tester une configuration sans toucher au fichier. Les choix sont aussi mémorisés dans :
 
@@ -141,6 +151,21 @@ Les modules cochés sont écrits dans le `.cfg` **au moment du clic sur « Lance
 Ce fichier contient le chemin du jeu et les trois booléens des modules. Si aucune préférence n'existe encore, le launcher reprend les valeurs déjà présentes dans le `.cfg`.
 
 L'écriture dans le `.cfg` est chirurgicale : seules les clés concernées changent, les commentaires BepInEx et les autres réglages (amende, durée de pousse, multiplicateur) sont conservés. Le lancement vanilla ne modifie ni le `.cfg` ni les modules.
+
+#### Installation sur le PC (icône, menu Démarrer, désinstallation)
+L'exécutable peut rester un simple fichier portable, mais le launcher sait aussi s'installer comme une vraie application : bouton **« Installer sur le PC »** en haut à droite de la fenêtre, également proposé au premier démarrage.
+
+- Copie de l'exécutable dans `%LOCALAPPDATA%\Programs\ItemAdder\ItemAdderLauncher.exe` — **aucun droit administrateur** n'est nécessaire. Si tu installes depuis un build multi-fichiers (`bin\...`), le `.dll`, le `.deps.json` et le `.runtimeconfig.json` sont copiés avec lui : sans eux, la copie installée ne démarrerait pas (et exigerait le .NET Desktop Runtime). L'exécutable publié en single-file n'en a pas besoin.
+- Raccourci **sur le Bureau** et dans le **menu Démarrer** (`Programs\ItemAdder`), avec l'icône du programme (un caddie ambre, générée pour cette application).
+- Entrée dans **« Applications installées »** de Windows : nom, version, éditeur, taille et icône. La désinstallation se lance depuis Windows ou depuis le bouton **« Désinstaller »** du launcher.
+- La désinstallation retire les raccourcis, l'entrée Windows et le dossier d'installation. Elle ne touche **ni au mod dans le jeu, ni à `%APPDATA%\ItemAdderLauncher`** : chemin du jeu et modules cochés sont conservés pour une réinstallation.
+
+Installation et désinstallation sont aussi disponibles en ligne de commande, pour un script ou un déploiement silencieux :
+
+```text
+ItemAdderLauncher.exe --install --silent
+ItemAdderLauncher.exe --uninstall --silent
+```
 
 Pour générer l'exécutable depuis les sources :
 
@@ -158,6 +183,8 @@ Le launcher accepte des arguments de ligne de commande, utiles quand quelque cho
 | `ItemAdderLauncher.exe --diagnose` | Écrit `launcher-diagnose.txt` : chemin du jeu, validité de l'exe, version du mod installé, BepInEx, dernière release |
 | `ItemAdderLauncher.exe --selftest [dll]` | Installe un DLL dans un faux dossier de jeu temporaire et vérifie la copie, la suppression de l'ancien DLL et la comparaison de versions → `launcher-selftest.txt` |
 | `ItemAdderLauncher.exe --bepinextest` | Télécharge et extrait BepInEx dans un dossier temporaire pour valider le réseau et l'archive → `launcher-bepinextest.txt` |
+| `ItemAdderLauncher.exe --install` | Installe le launcher sur le PC (raccourcis + entrée Windows) et affiche un récapitulatif ; `--silent` supprime les fenêtres |
+| `ItemAdderLauncher.exe --uninstall` | Désinstalle le launcher (raccourcis, entrée Windows, dossier d'installation) ; `--silent` supprime les fenêtres |
 
 Les rapports sont écrits dans le dossier courant du launcher.
 
@@ -363,6 +390,13 @@ Le launcher se met à jour depuis la même release, via un asset dédié :
 3. si cette version est plus récente que la sienne, une fenêtre propose de télécharger et redémarrer — jamais de remplacement silencieux ;
 4. s'il accepte : téléchargement dans `%TEMP%`, relecture de la version **dans le fichier téléchargé** (garde-fou), vérification que le dossier du launcher est accessible en écriture, puis un script `cmd` attend la fermeture du launcher, remplace l'exécutable (60 tentatives à 1 s d'intervalle), redémarre et nettoie le temporaire.
 
+Si le launcher est **installé sur le PC**, deux détails changent :
+
+- la mise à jour cible `%LOCALAPPDATA%\Programs\ItemAdder\ItemAdderLauncher.exe`, même si tu as lancé une copie téléchargée ailleurs. Les raccourcis du Bureau et du menu Démarrer pointent sur ce chemin : ils continuent de fonctionner sans être recréés ;
+- au démarrage suivant, la version affichée dans « Applications installées » est réalignée sur l'exécutable réellement présent.
+
+Sans installation, c'est le fichier exécuté qui est remplacé, comme avant. Les restes des mises à jour précédentes (exécutable téléchargé, scripts) sont supprimés du temporaire au démarrage.
+
 Un asset nommé simplement `ItemAdderLauncher.exe` est ignoré pour la vérification et signalé dans le journal. Si le launcher est installé dans un dossier protégé (`Program Files` sans droits), la mise à jour est refusée avec un message explicite avant tout téléchargement.
 
 ### Publier une release
@@ -397,7 +431,11 @@ BasedMod/
 ├── Install-BepInEx.ps1
 ├── ItemAdderLauncher/
 │   ├── ItemAdderLauncher.csproj
+│   ├── app.ico
 │   ├── app.manifest
+│   ├── Assets/
+│   │   ├── background.jpg
+│   │   └── logo.png
 │   ├── Program.cs
 │   ├── MainForm.cs
 │   ├── Diagnostics.cs
@@ -406,12 +444,16 @@ BasedMod/
 │   │   ├── GitHubService.cs
 │   │   ├── ModService.cs
 │   │   ├── ModConfig.cs
+│   │   ├── LauncherInstaller.cs
 │   │   ├── LauncherUpdater.cs
 │   │   ├── Models.cs
 │   │   ├── VersionHelper.cs
 │   │   └── LauncherSettings.cs
 │   └── UI/
 │       ├── Theme.cs
+│       ├── BackdropPanel.cs
+│       ├── MarkdownRenderer.cs
+│       ├── RoundedCheckBox.cs
 │       ├── RoundedPanel.cs
 │       ├── RoundedButton.cs
 │       └── RoundedTextBox.cs

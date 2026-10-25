@@ -13,6 +13,21 @@ public sealed class ReleaseInfo
     public required string DisplayName { get; init; }
     public required IReadOnlyList<ReleaseAsset> Assets { get; init; }
 
+    public string Body { get; init; } = string.Empty;
+
+    public string Author { get; init; } = string.Empty;
+
+    public string HtmlUrl { get; init; } = string.Empty;
+
+    public DateTimeOffset? PublishedAt { get; init; }
+
+    public bool Prerelease { get; init; }
+
+    /// <summary>Titre lisible : nom de la release, sinon son tag.</summary>
+    public string Title => string.IsNullOrWhiteSpace(DisplayName)
+        ? TagName
+        : DisplayName;
+
     public ReleaseAsset? SelectModAsset()
     {
         foreach (string preferred in new[] { "ItemAdder.dll", "MonSupermarketMod.dll" })

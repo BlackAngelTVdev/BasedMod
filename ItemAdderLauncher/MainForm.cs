@@ -1,48 +1,91 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using ItemAdderLauncher.Core;
 using ItemAdderLauncher.UI;
 
 namespace ItemAdderLauncher;
 
+internal enum LauncherPage
+{
+    Home,
+    News,
+    Journal
+}
+
 public sealed class MainForm : Form
 {
     private const int WmNcLButtonDown = 0xA1;
     private const int HtCaption = 0x2;
-    private const int NormalWidth = 710;
-    private const int NormalHeight = 640;
+    private const int SidebarWidth = 214;
+    private const int TitleBarHeight = 40;
+    private const int NormalWidth = 1120;
+    private const int NormalHeight = 694;
+
+    private static readonly CultureInfo FrenchCulture = CultureInfo.GetCultureInfo("fr-FR");
 
     private readonly GitHubService _gitHub = new();
     private readonly CancellationTokenSource _lifetime = new();
-
-    private readonly RoundedTextBox _pathInput;
-    private readonly RoundedButton _browseButton;
-    private readonly RoundedPanel _statusCard;
-    private readonly RoundedPanel _stateBadge;
-    private readonly Label _stateBadgeLabel;
-    private readonly Label _installedValue;
-    private readonly Label _installedFile;
-    private readonly Label _latestValue;
-    private readonly Label _bepInExValue;
-    private readonly TextBox _logBox;
-    private readonly RoundedButton _clearLogButton;
-    private readonly RoundedButton _installButton;
-    private readonly RoundedButton _checkButton;
-    private readonly RoundedButton _localDllButton;
-    private readonly RoundedButton _launchButton;
-    private readonly RoundedButton _vanillaButton;
-    private readonly RoundedButton _openFolderButton;
-    private readonly RoundedButton _releasesButton;
-    private readonly RoundedButton _maximizeButton;
-    private readonly CheckBox _tobaccoCheck;
-    private readonly CheckBox _undergroundCheck;
-    private readonly CheckBox _restockCheck;
-    private readonly Label _appTitle;
-    private readonly RoundedPanel _versionBadge;
-    private readonly Panel _titleBar;
     private readonly ToolTip _toolTip = new();
+    private readonly Image? _backgroundArt;
+    private readonly Image? _logoArt;
 
+    private Panel _titleBar = null!;
+    private Panel _sidebar = null!;
+    private BackdropPanel _contentHost = null!;
+    private Label _appTitle = null!;
+    private RoundedPanel _versionBadge = null!;
+    private RoundedButton _maximizeButton = null!;
+
+    private Panel _homePage = null!;
+    private Panel _newsPage = null!;
+    private Panel _journalPage = null!;
+
+    private RoundedButton _homeNav = null!;
+    private RoundedButton _newsNav = null!;
+    private RoundedButton _journalNav = null!;
+    private RoundedButton _installSelfButton = null!;
+    private RoundedButton _releasesButton = null!;
+
+    private RoundedTextBox _pathInput = null!;
+    private RoundedButton _browseButton = null!;
+    private RoundedPanel _statusCard = null!;
+    private RoundedPanel _stateBadge = null!;
+    private Label _stateBadgeLabel = null!;
+    private Label _installedValue = null!;
+    private Label _installedFile = null!;
+    private Label _latestValue = null!;
+    private Label _bepInExValue = null!;
+    private RoundedButton _installButton = null!;
+    private RoundedButton _checkButton = null!;
+    private RoundedButton _localDllButton = null!;
+    private RoundedButton _launchButton = null!;
+    private RoundedButton _vanillaButton = null!;
+    private RoundedButton _openFolderButton = null!;
+    private CheckBox _tobaccoCheck = null!;
+    private CheckBox _undergroundCheck = null!;
+    private CheckBox _restockCheck = null!;
+
+    private RoundedPanel _teaserCard = null!;
+    private Label _teaserTitle = null!;
+    private Label _teaserMeta = null!;
+
+    private FlowLayoutPanel _newsFlow = null!;
+    private Label _newsStatus = null!;
+    private RoundedButton _newsRefreshButton = null!;
+    private readonly System.Windows.Forms.Timer _newsLayoutTimer;
+
+    private TextBox _logBox = null!;
+    private RoundedButton _clearLogButton = null!;
+
+    private IReadOnlyList<ReleaseInfo> _releases = Array.Empty<ReleaseInfo>();
+    private bool _newsLoaded;
+    private bool _newsLoading;
+    private int _newsRenderedWidth;
+
+    private LauncherPage _page = LauncherPage.Home;
     private bool _busy;
     private bool _suppressModuleEvents;
     private bool _launcherUpdateChecked;
@@ -51,10 +94,13 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
+        _backgroundArt = LoadEmbeddedImage("ItemAdder.background.jpg");
+        _logoArt = LoadEmbeddedImage("ItemAdder.logo.png");
+
         Text = "ItemAdder Launcher";
         FormBorderStyle = FormBorderStyle.None;
         ClientSize = new Size(NormalWidth, NormalHeight);
-        MinimumSize = new Size(NormalWidth, NormalHeight);
+        MinimumSize = new Size(1000, 660);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
@@ -62,7 +108,7 @@ public sealed class MainForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         DoubleBuffered = true;
         KeyPreview = true;
-        Icon = SystemIcons.Application;
+        Icon = LoadAppIcon();
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
@@ -70,7 +116,45 @@ public sealed class MainForm : Form
             ControlStyles.ResizeRedraw,
             true);
 
-        _titleBar = BuildTitleBar(out _appTitle, out _versionBadge, out _maximizeButton);
+        _newsLayoutTimer = new System.Windows.Forms.Timer { Interval = 220 };
+        _newsLayoutTimer.Tick += NewsLayoutTimer_Tick;
+
+        BuildTitleBar();
+        BuildSidebar();
+
+        _contentHost = new BackdropPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Theme.Background,
+            Padding = new Padding(26, 14, 26, 18),
+            Artwork = _backgroundArt
+        };
+
+        _homePage = BuildHomePage();
+        _newsPage = BuildNewsPage();
+        _journalPage = BuildJournalPage();
+
+        foreach (Panel page in new[] { _homePage, _newsPage, _journalPage })
+        {
+            page.Dock = DockStyle.Fill;
+            page.BackColor = Color.Transparent;
+            page.Visible = false;
+            _contentHost.Controls.Add(page);
+        }
+
+        var body = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(9, 13, 20),
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, SidebarWidth));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        body.Controls.Add(_sidebar, 0, 0);
+        body.Controls.Add(_contentHost, 1, 0);
 
         var root = new TableLayoutPanel
         {
@@ -81,109 +165,25 @@ public sealed class MainForm : Form
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, TitleBarHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(_titleBar, 0, 0);
-
-        var content = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            ColumnCount = 1,
-            RowCount = 7,
-            Margin = Padding.Empty,
-            Padding = new Padding(20, 6, 20, 10)
-        };
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
-        content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-
-        Panel header = BuildHeader(out _releasesButton);
-        content.Controls.Add(header, 0, 0);
-
-        RoundedPanel pathCard = BuildPathCard(out _pathInput, out _browseButton);
-        pathCard.Margin = new Padding(0, 0, 0, 8);
-        content.Controls.Add(pathCard, 0, 1);
-
-        _statusCard = BuildStatusCard(
-            out _stateBadge,
-            out _stateBadgeLabel,
-            out _installedValue,
-            out _installedFile,
-            out _latestValue,
-            out _bepInExValue);
-        _statusCard.Margin = new Padding(0, 0, 0, 8);
-        content.Controls.Add(_statusCard, 0, 2);
-
-        TableLayoutPanel actions = BuildActions(
-            out _installButton,
-            out _checkButton,
-            out _localDllButton,
-            out _launchButton,
-            out _vanillaButton,
-            out _openFolderButton);
-        actions.Margin = new Padding(0, 0, 0, 8);
-        content.Controls.Add(actions, 0, 3);
-
-        RoundedPanel modules = BuildModulesCard(
-            out _tobaccoCheck,
-            out _undergroundCheck,
-            out _restockCheck);
-        modules.Margin = new Padding(0, 0, 0, 8);
-        content.Controls.Add(modules, 0, 4);
-
-        RoundedPanel journal = BuildJournal(out _logBox, out _clearLogButton);
-        content.Controls.Add(journal, 0, 5);
-
-        content.Controls.Add(BuildFooter(), 0, 6);
-        root.Controls.Add(content, 0, 1);
+        root.Controls.Add(body, 0, 1);
         Controls.Add(root);
 
-        _browseButton.Click += BrowseButton_Click;
-        _installButton.Click += InstallButton_Click;
-        _checkButton.Click += CheckButton_Click;
-        _localDllButton.Click += LocalDllButton_Click;
-        _launchButton.Click += LaunchButton_Click;
-        _vanillaButton.Click += VanillaButton_Click;
-        _openFolderButton.Click += OpenFolderButton_Click;
-        _releasesButton.Click += (_, _) => OpenUrl(GitHubService.ReleasesUrl);
-        _clearLogButton.Click += (_, _) => _logBox.Clear();
-        _maximizeButton.Click += (_, _) => ToggleMaximize();
-        _tobaccoCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
-        _undergroundCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
-        _restockCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
-
-        _toolTip.SetToolTip(_browseButton, "Choisir le dossier qui contient Supermarket Together.exe");
-        _toolTip.SetToolTip(_localDllButton, "Installer ou réparer le mod depuis un DLL déjà compilé");
-        _toolTip.SetToolTip(_launchButton, "Lancer Supermarket Together avec BepInEx et ItemAdder");
-        _toolTip.SetToolTip(_vanillaButton, "Lancer le jeu sans BepInEx ni ItemAdder");
-        _toolTip.SetToolTip(_openFolderButton, "Ouvrir BepInEx\\plugins dans l'Explorateur");
-        _toolTip.SetToolTip(_stateBadge, "État actuel de l'installation");
-        _toolTip.SetToolTip(
-            _tobaccoCheck,
-            "Coche pour lancer avec le rayon tabac et son palier de compétences. " +
-            "Garde-la cochée sur une sauvegarde qui contient déjà des produits tabac.");
-        _toolTip.SetToolTip(
-            _undergroundCheck,
-            "Coche pour lancer avec le sous-sol clandestin (culture, police, raids). " +
-            "Tous les joueurs doivent avoir le même réglage.");
-        _toolTip.SetToolTip(
-            _restockCheck,
-            "Les employés de réassort rangent les produits restés en réserve " +
-            "sur l'étagère compatible la plus proche.");
-
+        WireEvents();
         LoadSavedGamePath();
+        UpdateInstallButton();
+        LauncherInstaller.RefreshRegistration();
+        ShowPage(LauncherPage.Home);
+
         Shown += MainForm_Shown;
         FormClosing += (_, _) =>
         {
+            _newsLayoutTimer.Stop();
             _lifetime.Cancel();
         };
     }
-
 
     protected override CreateParams CreateParams
     {
@@ -213,781 +213,298 @@ public sealed class MainForm : Form
         }
 
         LayoutTitleBar();
-        LayoutStatusColumns();
+        LayoutStatusColumns(_statusCard);
     }
 
-    private Panel BuildTitleBar(
-        out Label appTitle,
-        out RoundedPanel versionBadge,
-        out RoundedButton maximizeButton)
+    // ---------------------------------------------------------------- chrome
+
+    private void BuildTitleBar()
     {
-        var titleBar = new Panel
+        _titleBar = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Theme.TitleBar,
+            BackColor = Color.FromArgb(9, 13, 20),
             Margin = Padding.Empty
         };
 
-        var logo = new RoundedPanel
+        var logo = new PictureBox
         {
-            CornerRadius = 5,
-            BackColor = Theme.Accent,
-            Location = new Point(12, 8),
-            Size = new Size(20, 20)
+            Image = _logoArt,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Size = new Size(20, 20),
+            Location = new Point(14, 10),
+            BackColor = Color.Transparent
         };
-        var logoGlyph = new Label
-        {
-            Text = "\uE7B8",
-            Dock = DockStyle.Fill,
-            Font = Theme.Icon(9f),
-            ForeColor = Theme.Background,
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        logo.Controls.Add(logoGlyph);
-        titleBar.Controls.Add(logo);
+        _titleBar.Controls.Add(logo);
 
-        appTitle = new Label
+        _appTitle = new Label
         {
             Text = "ItemAdder Launcher",
             AutoSize = true,
             Font = Theme.Ui(9f, FontStyle.Bold),
             ForeColor = Color.FromArgb(203, 213, 225),
-            Location = new Point(40, 10)
+            BackColor = Color.Transparent,
+            Location = new Point(42, 11)
         };
-        titleBar.Controls.Add(appTitle);
+        _titleBar.Controls.Add(_appTitle);
 
-        versionBadge = new RoundedPanel
+        _versionBadge = new RoundedPanel
         {
             CornerRadius = 5,
-            BackColor = Theme.Surface,
+            BackColor = Color.FromArgb(20, 28, 40),
             BorderColor = Theme.BorderSoft,
             BorderThickness = 1,
             Size = new Size(54, 18),
-            Location = new Point(168, 9)
+            Location = new Point(166, 10)
         };
-        var versionLabel = new Label
+        _versionBadge.Controls.Add(new Label
         {
             Text = GetLauncherVersion(),
             Dock = DockStyle.Fill,
             Font = Theme.Ui(7.5f),
             ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleCenter
-        };
-        versionBadge.Controls.Add(versionLabel);
-        titleBar.Controls.Add(versionBadge);
+        });
+        _titleBar.Controls.Add(_versionBadge);
 
-        RoundedButton minimizeButton = CreateTitleButton("\uE921", 0);
-        minimizeButton.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        titleBar.Controls.Add(minimizeButton);
+        RoundedButton minimize = CreateTitleButton("\uE921", 0);
+        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        _titleBar.Controls.Add(minimize);
 
-        maximizeButton = CreateTitleButton("\uE922", 1);
-        titleBar.Controls.Add(maximizeButton);
+        _maximizeButton = CreateTitleButton("\uE922", 1);
+        _maximizeButton.Click += (_, _) => ToggleMaximize();
+        _titleBar.Controls.Add(_maximizeButton);
 
-        RoundedButton closeButton = CreateTitleButton("\uE8BB", 2);
-        closeButton.HoverBackColor = Color.FromArgb(127, 29, 29);
-        closeButton.PressedBackColor = Color.FromArgb(153, 27, 27);
-        closeButton.Click += (_, _) => Close();
-        titleBar.Controls.Add(closeButton);
+        RoundedButton close = CreateTitleButton("\uE8BB", 2);
+        close.HoverBackColor = Color.FromArgb(127, 29, 29);
+        close.PressedBackColor = Color.FromArgb(153, 27, 27);
+        close.Click += (_, _) => Close();
+        _titleBar.Controls.Add(close);
 
-        var bottomBorder = new Panel
+        var hairline = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 1,
-            BackColor = Theme.BorderSoft
+            BackColor = Color.FromArgb(20, 29, 43)
         };
-        titleBar.Controls.Add(bottomBorder);
+        _titleBar.Controls.Add(hairline);
 
-        titleBar.Resize += (_, _) => LayoutTitleBar();
-        EnableDrag(titleBar);
-        EnableDrag(appTitle);
-        EnableDrag(logo);
-        EnableDrag(logoGlyph);
-        EnableDrag(versionBadge);
-        EnableDrag(versionLabel);
-
-        return titleBar;
+        _titleBar.Resize += (_, _) => LayoutTitleBar();
+        foreach (Control control in new Control[] { _titleBar, _appTitle, logo, _versionBadge })
+        {
+            EnableDrag(control);
+        }
     }
 
     private static RoundedButton CreateTitleButton(string glyph, int slot)
     {
-        var button = new RoundedButton
+        return new RoundedButton
         {
             Text = string.Empty,
             IconGlyph = glyph,
-            IconFont = Theme.Icon(8.5f),
+            IconFont = Theme.Icon(9f),
             IconColor = Color.FromArgb(148, 163, 184),
-            BackColor = Theme.TitleBar,
-            HoverBackColor = Theme.Surface,
-            PressedBackColor = Theme.SurfaceRaised,
-            CornerRadius = 4,
+            BackColor = Color.FromArgb(9, 13, 20),
+            HoverBackColor = Color.FromArgb(24, 34, 48),
+            PressedBackColor = Color.FromArgb(31, 44, 62),
+            CornerRadius = 5,
             Size = new Size(30, 26),
             TabStop = false,
             Tag = slot
         };
-        return button;
     }
 
-    private Panel BuildHeader(out RoundedButton releasesButton)
+    private void BuildSidebar()
     {
-        var header = new Panel
+        _sidebar = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            Margin = new Padding(0, 0, 0, 4)
+            BackColor = Color.FromArgb(9, 13, 20),
+            Margin = Padding.Empty
         };
 
-        var title = new Label
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(9, 13, 20),
+            ColumnCount = 1,
+            RowCount = 9,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 14));
+
+        var brand = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 13, 20) };
+        brand.Controls.Add(new PictureBox
+        {
+            Image = _logoArt,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Size = new Size(42, 42),
+            Location = new Point(18, 20),
+            BackColor = Color.Transparent
+        });
+        brand.Controls.Add(new Label
         {
             Text = "ItemAdder",
             AutoSize = true,
-            Font = Theme.Ui(20f, FontStyle.Bold),
+            Font = Theme.Ui(13f, FontStyle.Bold),
             ForeColor = Theme.Text,
-            Location = new Point(8, 7)
-        };
-        header.Controls.Add(title);
-
-        var pill = new RoundedPanel
+            BackColor = Color.Transparent,
+            Location = new Point(70, 22)
+        });
+        brand.Controls.Add(new Label
         {
-            CornerRadius = 14,
-            BackColor = Theme.BlueSoft,
-            BorderColor = Color.FromArgb(35, 69, 110),
-            BorderThickness = 1,
-            Location = new Point(160, 10),
-            Size = new Size(166, 28)
-        };
-        var pillDot = new Panel
-        {
-            BackColor = Theme.Blue,
-            Location = new Point(11, 10),
-            Size = new Size(7, 7)
-        };
-        using (var dotPath = new GraphicsPath())
-        {
-            dotPath.AddEllipse(0, 0, 7, 7);
-            pillDot.Region = new Region(dotPath);
-        }
-        pill.Controls.Add(pillDot);
-        var pillText = new Label
-        {
-            Text = "Supermarket Together",
-            Font = Theme.Ui(8.5f),
-            ForeColor = Color.FromArgb(191, 219, 254),
-            AutoSize = false,
-            Location = new Point(24, 0),
-            Size = new Size(132, 28),
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        pill.Controls.Add(pillText);
-        header.Controls.Add(pill);
-
-        var subtitle = new Label
-        {
-            Text = "Installe et met à jour le mod Supermarket Together depuis GitHub.",
-            AutoSize = false,
-            Font = Theme.Ui(8.5f),
+            Text = "Launcher " + GetLauncherVersion(),
+            AutoSize = true,
+            Font = Theme.Ui(8f),
             ForeColor = Theme.TextMuted,
-            Location = new Point(8, 41),
-            Size = new Size(480, 20)
-        };
-        header.Controls.Add(subtitle);
+            BackColor = Color.Transparent,
+            Location = new Point(71, 44)
+        });
+        layout.Controls.Add(brand, 0, 0);
 
-        releasesButton = new RoundedButton
+        var navCaption = new Label
+        {
+            Text = "NAVIGATION",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            Font = Theme.Ui(7.5f, FontStyle.Bold),
+            ForeColor = Theme.TextFaint,
+            BackColor = Color.FromArgb(9, 13, 20),
+            Padding = new Padding(20, 0, 0, 4)
+        };
+        layout.Controls.Add(navCaption, 0, 1);
+
+        _homeNav = CreateNavButton("Accueil", "\uE80F");
+        _newsNav = CreateNavButton("Actualités", "\uE8A5");
+        _journalNav = CreateNavButton("Journal", "\uE81C");
+        layout.Controls.Add(_homeNav, 0, 2);
+        layout.Controls.Add(_newsNav, 0, 3);
+        layout.Controls.Add(_journalNav, 0, 4);
+
+        _installSelfButton = new RoundedButton
+        {
+            Text = "Installer sur le PC",
+            IconGlyph = "\uE896",
+            IconFont = Theme.Icon(10f),
+            IconColor = Theme.Accent,
+            BackColor = Color.FromArgb(18, 25, 37),
+            HoverBackColor = Color.FromArgb(26, 36, 51),
+            PressedBackColor = Color.FromArgb(31, 44, 62),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(16, 0, 16, 8)
+        };
+        layout.Controls.Add(_installSelfButton, 0, 6);
+
+        _releasesButton = new RoundedButton
         {
             Text = "Releases GitHub",
             IconGlyph = "\uE8A7",
-            IconFont = Theme.Icon(8.5f),
-            IconColor = Theme.Accent,
-            BackColor = Theme.Surface,
-            ForeColor = Theme.Accent,
-            BorderColor = Color.FromArgb(96, 65, 16),
-            BorderThickness = 1,
-            CornerRadius = 7,
-            Font = Theme.Ui(8.5f),
-            Location = new Point(546, 4),
-            Size = new Size(124, 36)
-        };
-        header.Controls.Add(releasesButton);
-        RoundedButton releasesButtonLocal = releasesButton;
-
-        header.Resize += (_, _) =>
-        {
-            pill.Left = Math.Max(140, title.Right + 2);
-            releasesButtonLocal.Left = Math.Max(
-                330,
-                header.ClientSize.Width - releasesButtonLocal.Width - 2);
-            subtitle.Width = Math.Max(240, header.ClientSize.Width - 170);
-        };
-
-        return header;
-    }
-
-    private static RoundedPanel BuildPathCard(
-        out RoundedTextBox pathInput,
-        out RoundedButton browseButton)
-    {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Surface,
-            BorderColor = Theme.Border,
-            BorderThickness = 1,
-            CornerRadius = 10
-        };
-
-        var folderIcon = new Label
-        {
-            Text = "\uE8B7",
-            Font = Theme.Icon(9f),
-            ForeColor = Theme.Accent,
-            AutoSize = false,
-            Location = new Point(14, 8),
-            Size = new Size(18, 18),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        card.Controls.Add(folderIcon);
-
-        var label = new Label
-        {
-            Text = "Dossier du jeu",
-            AutoSize = false,
-            Font = Theme.Ui(8.5f),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(34, 8),
-            Size = new Size(220, 18)
-        };
-        card.Controls.Add(label);
-
-        pathInput = new RoundedTextBox
-        {
-            Location = new Point(14, 27),
-            Size = new Size(500, 30)
-        };
-        card.Controls.Add(pathInput);
-
-        browseButton = new RoundedButton
-        {
-            Text = "Parcourir...",
-            IconGlyph = "\uE8B7",
-            IconFont = Theme.Icon(9f),
+            IconFont = Theme.Icon(10f),
             IconColor = Theme.TextMuted,
-            BackColor = Theme.SurfaceRaised,
-            HoverBackColor = Color.FromArgb(34, 52, 78),
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.Text,
-            CornerRadius = 7,
-            Font = Theme.Ui(8.5f),
-            Location = new Point(564, 27),
-            Size = new Size(92, 30)
+            BackColor = Color.FromArgb(9, 13, 20),
+            HoverBackColor = Color.FromArgb(20, 29, 43),
+            PressedBackColor = Color.FromArgb(26, 37, 54),
+            ForeColor = Theme.TextMuted,
+            CornerRadius = 9,
+            Font = Theme.Ui(8.6f),
+            Dock = DockStyle.Fill,
+            Margin = new Padding(16, 0, 16, 6)
         };
-        card.Controls.Add(browseButton);
-        RoundedButton browseButtonLocal = browseButton;
-        RoundedTextBox pathInputLocal = pathInput;
+        layout.Controls.Add(_releasesButton, 0, 7);
 
-        card.Resize += (_, _) =>
-        {
-            browseButtonLocal.Left = Math.Max(
-                120,
-                card.ClientSize.Width - 6 - browseButtonLocal.Width);
-            pathInputLocal.Width = Math.Max(
-                120,
-                browseButtonLocal.Left - 6 - pathInputLocal.Left);
-        };
-
-        return card;
+        _sidebar.Controls.Add(layout);
     }
 
-    private static RoundedPanel BuildStatusCard(
-        out RoundedPanel stateBadge,
-        out Label stateBadgeLabel,
-        out Label installedValue,
-        out Label installedFile,
-        out Label latestValue,
-        out Label bepInExValue)
-    {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Surface,
-            BorderColor = Theme.Border,
-            BorderThickness = 1,
-            CornerRadius = 10,
-            ShowDividers = true
-        };
-
-        var shield = new Label
-        {
-            Text = "\uE83D",
-            Font = Theme.Icon(9f),
-            ForeColor = Theme.Accent,
-            AutoSize = false,
-            Location = new Point(14, 10),
-            Size = new Size(18, 18),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        card.Controls.Add(shield);
-
-        var heading = new Label
-        {
-            Text = "ÉTAT DE L'INSTALLATION",
-            AutoSize = false,
-            Font = Theme.Ui(8f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(34, 10),
-            Size = new Size(260, 18)
-        };
-        card.Controls.Add(heading);
-
-        stateBadge = new RoundedPanel
-        {
-            CornerRadius = 12,
-            BackColor = Theme.GreenSoft,
-            BorderColor = Color.FromArgb(75, 150, 105),
-            BorderThickness = 1,
-            Size = new Size(96, 24),
-            Location = new Point(560, 9),
-            Tag = "stateBadge"
-        };
-        stateBadgeLabel = new Label
-        {
-            Text = "●  Prêt",
-            Dock = DockStyle.Fill,
-            Font = Theme.Ui(7.5f, FontStyle.Bold),
-            ForeColor = Theme.Green,
-            TextAlign = ContentAlignment.MiddleCenter,
-            AutoEllipsis = true
-        };
-        stateBadge.Controls.Add(stateBadgeLabel);
-        card.Controls.Add(stateBadge);
-
-        Label installedHeader = MakeColumnHeader("Version installée");
-        Label latestHeader = MakeColumnHeader("Dernière release");
-        Label bepInExHeader = MakeColumnHeader("BepInEx");
-        installedValue = MakeColumnValue();
-        latestValue = MakeColumnValue();
-        bepInExValue = MakeColumnValue();
-        installedFile = MakeColumnNote();
-        Label latestNote = MakeColumnNote();
-        Label bepInExNote = MakeColumnNote();
-
-        card.Controls.Add(installedHeader);
-        card.Controls.Add(latestHeader);
-        card.Controls.Add(bepInExHeader);
-        card.Controls.Add(installedValue);
-        card.Controls.Add(latestValue);
-        card.Controls.Add(bepInExValue);
-        card.Controls.Add(installedFile);
-        card.Controls.Add(latestNote);
-        card.Controls.Add(bepInExNote);
-
-        card.Resize += (_, _) => LayoutStatusColumns(card);
-
-        installedHeader.Tag = "header";
-        latestHeader.Tag = "header";
-        bepInExHeader.Tag = "header";
-        installedValue.Tag = "value";
-        latestValue.Tag = "value";
-        bepInExValue.Tag = "value";
-        installedFile.Tag = "note";
-        latestNote.Tag = "note";
-        bepInExNote.Tag = "note";
-        installedFile.Text = string.Empty;
-        latestNote.Text = string.Empty;
-        bepInExNote.Text = string.Empty;
-
-        LayoutStatusColumns(card);
-        return card;
-    }
-
-    private static Label MakeColumnHeader(string text)
+    private static Label MakeCardIcon(string glyph, int top)
     {
         return new Label
+        {
+            Text = glyph,
+            Font = Theme.Icon(10f),
+            ForeColor = Theme.Accent,
+            AutoSize = false,
+            Location = new Point(15, top),
+            Size = new Size(20, 18),
+            TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = Color.Transparent
+        };
+    }
+
+    private static RoundedButton CreateNavButton(string text, string glyph)
+    {
+        return new RoundedButton
         {
             Text = text,
-            AutoSize = false,
-            Font = Theme.Ui(7.5f),
+            IconGlyph = glyph,
+            IconFont = Theme.Icon(10f),
+            IconColor = Theme.TextMuted,
+            BackColor = Color.FromArgb(9, 13, 20),
+            HoverBackColor = Color.FromArgb(18, 26, 38),
+            PressedBackColor = Color.FromArgb(24, 34, 49),
+            SelectedBackColor = Color.FromArgb(22, 32, 47),
             ForeColor = Theme.TextMuted,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f),
             TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
+            IconGap = 11,
+            ContentPadding = 16,
+            ShowSelectionBar = true,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(16, 0, 16, 6)
         };
     }
 
-    private static Label MakeColumnValue()
+    /// <summary>
+    /// Ligne de boutons avec de vrais écarts : les colonnes de séparation
+    /// absolues évitent que les marges ne fassent déborder la dernière colonne
+    /// hors de la fenêtre.
+    /// </summary>
+    private static TableLayoutPanel BuildButtonRow(int count, int gap, float[]? fixedWidths = null)
     {
-        return new Label
-        {
-            Text = "—",
-            AutoSize = false,
-            Font = Theme.Ui(9.5f, FontStyle.Bold),
-            ForeColor = Theme.Text,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
-        };
-    }
-
-    private static Label MakeColumnNote()
-    {
-        return new Label
-        {
-            Text = string.Empty,
-            AutoSize = false,
-            Font = Theme.Ui(7.5f),
-            ForeColor = Theme.TextFaint,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
-        };
-    }
-
-    private static TableLayoutPanel BuildActions(
-        out RoundedButton installButton,
-        out RoundedButton checkButton,
-        out RoundedButton localDllButton,
-        out RoundedButton launchButton,
-        out RoundedButton vanillaButton,
-        out RoundedButton openFolderButton)
-    {
-        var actions = new TableLayoutPanel
+        var row = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty
-        };
-        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-
-        var firstRow = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            ColumnCount = 3,
+            BackColor = Color.Transparent,
+            ColumnCount = (count * 2) - 1,
             RowCount = 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
-        for (int i = 0; i < 3; i++)
+        row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        for (int i = 0; i < row.ColumnCount; i++)
         {
-            firstRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
+            if (i % 2 == 1)
+            {
+                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, gap));
+                continue;
+            }
+
+            int index = i / 2;
+            float fixedWidth = fixedWidths is not null && index < fixedWidths.Length
+                ? fixedWidths[index]
+                : 0f;
+            row.ColumnStyles.Add(fixedWidth > 0
+                ? new ColumnStyle(SizeType.Absolute, fixedWidth)
+                : new ColumnStyle(SizeType.Percent, 100f));
         }
 
-        installButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Installer / Mettre à jour",
-            IconGlyph = "\uE896",
-            IconFont = Theme.Icon(9.5f),
-            IconColor = Color.FromArgb(17, 24, 39),
-            BackColor = Theme.Accent,
-            HoverBackColor = Color.FromArgb(251, 191, 36),
-            PressedBackColor = Color.FromArgb(217, 119, 6),
-            ForeColor = Color.FromArgb(17, 24, 39),
-            CornerRadius = 8,
-            Font = Theme.Ui(9f, FontStyle.Bold),
-            Margin = new Padding(0, 0, 8, 0)
-        };
-        checkButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Vérifier les mises à jour",
-            IconGlyph = "\uE72C",
-            IconFont = Theme.Icon(9f),
-            IconColor = Theme.Text,
-            BackColor = Theme.SurfaceRaised,
-            HoverBackColor = Color.FromArgb(34, 52, 78),
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.Text,
-            CornerRadius = 8,
-            Font = Theme.Ui(8.5f, FontStyle.Bold),
-            Margin = new Padding(0, 0, 8, 0)
-        };
-        localDllButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Installer un DLL local...",
-            IconGlyph = "\uE7B8",
-            IconFont = Theme.Icon(9f),
-            IconColor = Theme.Text,
-            BackColor = Theme.SurfaceRaised,
-            HoverBackColor = Color.FromArgb(34, 52, 78),
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.Text,
-            CornerRadius = 8,
-            Font = Theme.Ui(8.5f, FontStyle.Bold),
-            Margin = Padding.Empty
-        };
-        firstRow.Controls.Add(installButton, 0, 0);
-        firstRow.Controls.Add(checkButton, 1, 0);
-        firstRow.Controls.Add(localDllButton, 2, 0);
-
-        var secondRow = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            ColumnCount = 3,
-            RowCount = 1,
-            Margin = new Padding(0, 6, 0, 0),
-            Padding = Padding.Empty
-        };
-        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
-        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34f));
-        secondRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f));
-
-        launchButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Lancer le jeu",
-            IconGlyph = "\uE768",
-            IconFont = Theme.Icon(8.5f),
-            IconColor = Color.FromArgb(134, 239, 172),
-            BackColor = Theme.GreenSoft,
-            HoverBackColor = Color.FromArgb(14, 55, 52),
-            PressedBackColor = Color.FromArgb(8, 35, 34),
-            ForeColor = Color.FromArgb(134, 239, 172),
-            CornerRadius = 8,
-            Font = Theme.Ui(8.5f, FontStyle.Bold),
-            Margin = new Padding(0, 0, 8, 0)
-        };
-        vanillaButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Lancer en vanilla",
-            IconGlyph = "\uE768",
-            IconFont = Theme.Icon(8.5f),
-            IconColor = Theme.TextMuted,
-            BackColor = Theme.SurfaceRaised,
-            HoverBackColor = Color.FromArgb(34, 52, 78),
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.Text,
-            CornerRadius = 8,
-            Font = Theme.Ui(8.5f, FontStyle.Bold),
-            Margin = new Padding(0, 0, 8, 0)
-        };
-        openFolderButton = new RoundedButton
-        {
-            Dock = DockStyle.Fill,
-            Text = "Ouvrir BepInEx",
-            IconGlyph = "\uE8B7",
-            IconFont = Theme.Icon(9f),
-            IconColor = Theme.TextMuted,
-            BackColor = Theme.SurfaceRaised,
-            HoverBackColor = Color.FromArgb(34, 52, 78),
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.Text,
-            CornerRadius = 8,
-            Font = Theme.Ui(8.5f, FontStyle.Bold),
-            Margin = Padding.Empty
-        };
-        secondRow.Controls.Add(launchButton, 0, 0);
-        secondRow.Controls.Add(vanillaButton, 1, 0);
-        secondRow.Controls.Add(openFolderButton, 2, 0);
-
-        actions.Controls.Add(firstRow, 0, 0);
-        actions.Controls.Add(secondRow, 0, 1);
-        return actions;
-    }
-
-    private static RoundedPanel BuildModulesCard(
-        out CheckBox tobacco,
-        out CheckBox undergroundToCheck,
-        out CheckBox restock)
-    {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Surface,
-            BorderColor = Theme.Border,
-            BorderThickness = 1,
-            CornerRadius = 10
-        };
-
-        var gear = new Label
-        {
-            Text = "\uE713",
-            Font = Theme.Icon(9f),
-            ForeColor = Theme.Accent,
-            AutoSize = false,
-            Location = new Point(14, 8),
-            Size = new Size(18, 18),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        card.Controls.Add(gear);
-
-        var heading = new Label
-        {
-            Text = "MODULES AU LANCEMENT",
-            AutoSize = false,
-            Font = Theme.Ui(8f, FontStyle.Bold),
-            ForeColor = Theme.Accent,
-            Location = new Point(34, 8),
-            Size = new Size(260, 18)
-        };
-        card.Controls.Add(heading);
-
-        var hint = new Label
-        {
-            Text = "Appliqué au prochain lancement",
-            AutoSize = false,
-            Font = Theme.Ui(7.5f),
-            ForeColor = Theme.TextFaint,
-            TextAlign = ContentAlignment.MiddleRight,
-            Location = new Point(400, 8),
-            Size = new Size(256, 18),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
-        };
-        card.Controls.Add(hint);
-        hint.BringToFront();
-
-        tobacco = CreateModuleCheckBox("Rayon Tabac", 34);
-        undergroundToCheck = CreateModuleCheckBox("Sous-sol clandestin", 214);
-        restock = CreateModuleCheckBox("Réassort intelligent", 360);
-
-        card.Controls.Add(tobacco);
-        card.Controls.Add(undergroundToCheck);
-        card.Controls.Add(restock);
-
-        return card;
-    }
-
-    private static CheckBox CreateModuleCheckBox(string text, int left)
-    {
-        return new CheckBox
-        {
-            Text = text,
-            AutoSize = true,
-            Location = new Point(left, 34),
-            BackColor = Theme.Surface,
-            ForeColor = Theme.Text,
-            Font = Theme.Ui(8.5f),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand,
-            Checked = true
-        };
-    }
-
-    private static RoundedPanel BuildJournal(out TextBox logBox, out RoundedButton clearButton)
-    {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Journal,
-            BorderColor = Theme.Border,
-            BorderThickness = 1,
-            CornerRadius = 10,
-            Padding = new Padding(14, 0, 14, 12)
-        };
-
-        var header = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 30,
-            BackColor = Theme.Journal,
-            Margin = Padding.Empty
-        };
-
-        var terminalIcon = new Label
-        {
-            Text = "\uE756",
-            Font = Theme.Icon(8.5f),
-            ForeColor = Theme.Accent,
-            AutoSize = false,
-            Location = new Point(0, 8),
-            Size = new Size(18, 18),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-        header.Controls.Add(terminalIcon);
-
-        var title = new Label
-        {
-            Text = "JOURNAL",
-            AutoSize = false,
-            Font = Theme.Ui(7.5f, FontStyle.Bold),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(23, 8),
-            Size = new Size(180, 18)
-        };
-        header.Controls.Add(title);
-
-        clearButton = new RoundedButton
-        {
-            Text = "Effacer",
-            IconGlyph = "\uE74D",
-            IconFont = Theme.Icon(7.5f),
-            IconColor = Theme.TextFaint,
-            BackColor = Theme.Journal,
-            HoverBackColor = Theme.SurfaceRaised,
-            PressedBackColor = Color.FromArgb(28, 44, 67),
-            ForeColor = Theme.TextFaint,
-            CornerRadius = 5,
-            Font = Theme.Ui(7.5f),
-            Size = new Size(74, 22),
-            Location = new Point(0, 4)
-        };
-        header.Controls.Add(clearButton);
-        RoundedButton clearButtonLocal = clearButton;
-        header.Resize += (_, _) =>
-        {
-            clearButtonLocal.Left = Math.Max(
-                100,
-                header.ClientSize.Width - clearButtonLocal.Width);
-        };
-
-        logBox = new TextBox
-        {
-            Dock = DockStyle.Fill,
-            Multiline = true,
-            ReadOnly = true,
-            ScrollBars = ScrollBars.None,
-            BackColor = Theme.Input,
-            ForeColor = Color.FromArgb(203, 213, 225),
-            BorderStyle = BorderStyle.None,
-            Font = new Font("Consolas", 8f),
-            WordWrap = false,
-            Margin = Padding.Empty
-        };
-
-        card.Controls.Add(logBox);
-        card.Controls.Add(header);
-        return card;
-    }
-
-    private static Panel BuildFooter()
-    {
-        var footer = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Theme.Background,
-            Margin = Padding.Empty
-        };
-
-        var icon = new Label
-        {
-            Text = "\uE82F",
-            AutoSize = true,
-            Font = Theme.Icon(8f),
-            ForeColor = Theme.Accent,
-            BackColor = Color.Transparent
-        };
-        var label = new Label
-        {
-            Text = "Les releases GitHub sont vérifiées à l'ouverture. Ferme le jeu avant toute installation.",
-            AutoSize = true,
-            Font = Theme.Ui(7.5f),
-            ForeColor = Theme.TextFaint,
-            BackColor = Color.Transparent
-        };
-        footer.Controls.Add(icon);
-        footer.Controls.Add(label);
-
-        footer.Resize += (_, _) =>
-        {
-            int totalWidth = icon.Width + 6 + label.Width;
-            int left = Math.Max(0, (footer.ClientSize.Width - totalWidth) / 2);
-            icon.Location = new Point(left, (footer.ClientSize.Height - icon.Height) / 2);
-            label.Location = new Point(icon.Right + 6, (footer.ClientSize.Height - label.Height) / 2);
-        };
-
-        return footer;
+        return row;
     }
 
     private void LayoutTitleBar()
@@ -1009,14 +526,384 @@ public sealed class MainForm : Form
         {
             x -= buttons[i].Width;
             buttons[i].Left = x;
-            buttons[i].Top = 5;
+            buttons[i].Top = 6;
             x -= 4;
         }
     }
 
-    private void LayoutStatusColumns()
+    private void UpdateWindowRegion()
     {
-        LayoutStatusColumns(_statusCard);
+        if (!IsHandleCreated)
+        {
+            return;
+        }
+
+        if (WindowState == FormWindowState.Maximized || WindowState == FormWindowState.Minimized)
+        {
+            Region = null;
+            return;
+        }
+
+        using var path = new GraphicsPath();
+        var rect = new Rectangle(0, 0, Width, Height);
+        const int radius = 14;
+        float diameter = radius * 2f;
+        path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
+        path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
+        path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+        path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+
+        Region? oldRegion = Region;
+        Region = new Region(path);
+        oldRegion?.Dispose();
+    }
+
+    private void ToggleMaximize()
+    {
+        MaximizedBounds = Screen.FromControl(this).WorkingArea;
+        WindowState = WindowState == FormWindowState.Maximized
+            ? FormWindowState.Normal
+            : FormWindowState.Maximized;
+        UpdateWindowRegion();
+    }
+
+    private void EnableDrag(Control control)
+    {
+        control.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            ReleaseCapture();
+            SendMessage(Handle, WmNcLButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
+        };
+
+        control.DoubleClick += (_, _) => ToggleMaximize();
+    }
+
+    // ------------------------------------------------------------ navigation
+
+    private void ShowPage(LauncherPage page)
+    {
+        _page = page;
+        _homePage.Visible = page == LauncherPage.Home;
+        _newsPage.Visible = page == LauncherPage.News;
+        _journalPage.Visible = page == LauncherPage.Journal;
+
+        UpdateNavState();
+
+        if (page == LauncherPage.News)
+        {
+            _ = ShowNewsAsync();
+        }
+    }
+
+    private void UpdateNavState()
+    {
+        (_homeNav.Selected, _homeNav.ForeColor, _homeNav.IconColor) = NavStyle(LauncherPage.Home);
+        (_newsNav.Selected, _newsNav.ForeColor, _newsNav.IconColor) = NavStyle(LauncherPage.News);
+        (_journalNav.Selected, _journalNav.ForeColor, _journalNav.IconColor) = NavStyle(LauncherPage.Journal);
+
+        _homeNav.Invalidate();
+        _newsNav.Invalidate();
+        _journalNav.Invalidate();
+    }
+
+    private (bool Selected, Color Text, Color Icon) NavStyle(LauncherPage page)
+    {
+        return _page == page
+            ? (true, Theme.Text, Theme.Accent)
+            : (false, Theme.TextMuted, Theme.TextMuted);
+    }
+
+    // ----------------------------------------------------------- page: home
+
+    private Panel BuildHomePage()
+    {
+        var page = new Panel { BackColor = Color.Transparent, Padding = Padding.Empty };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ColumnCount = 1,
+            RowCount = 8,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+
+        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        header.Controls.Add(new Label
+        {
+            Text = "Tableau de bord",
+            AutoSize = true,
+            Font = Theme.Ui(18f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            BackColor = Color.Transparent,
+            Location = new Point(2, 2)
+        });
+        header.Controls.Add(new Label
+        {
+            Text = "Supermarket Together · mod ItemAdder, BepInEx et sous-sol clandestin",
+            AutoSize = true,
+            Font = Theme.Ui(8.5f),
+            ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent,
+            Location = new Point(3, 32)
+        });
+        layout.Controls.Add(header, 0, 0);
+
+        var pathCard = BuildPathCard(out _pathInput, out _browseButton);
+        pathCard.Dock = DockStyle.Fill;
+        pathCard.Margin = new Padding(0, 0, 0, 10);
+        layout.Controls.Add(pathCard, 0, 1);
+
+        _statusCard = BuildStatusCard(
+            out _stateBadge,
+            out _stateBadgeLabel,
+            out _installedValue,
+            out _installedFile,
+            out _latestValue,
+            out _bepInExValue);
+        _statusCard.Dock = DockStyle.Fill;
+        _statusCard.Margin = new Padding(0, 0, 0, 10);
+        layout.Controls.Add(_statusCard, 0, 2);
+
+        var actions = BuildActions(
+            out _installButton,
+            out _checkButton,
+            out _localDllButton);
+        actions.Dock = DockStyle.Fill;
+        actions.Margin = new Padding(0, 0, 0, 10);
+        layout.Controls.Add(actions, 0, 3);
+
+        var modules = BuildModulesCard(
+            out _tobaccoCheck,
+            out _undergroundCheck,
+            out _restockCheck);
+        modules.Dock = DockStyle.Fill;
+        modules.Margin = new Padding(0, 0, 0, 10);
+        layout.Controls.Add(modules, 0, 4);
+
+        _teaserCard = BuildTeaserCard(out _teaserTitle, out _teaserMeta);
+        _teaserCard.Dock = DockStyle.Fill;
+        _teaserCard.Margin = new Padding(0, 0, 0, 10);
+        layout.Controls.Add(_teaserCard, 0, 5);
+
+        var spacer = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        layout.Controls.Add(spacer, 0, 6);
+
+        var launchRow = BuildLaunchRow(out _launchButton, out _vanillaButton, out _openFolderButton);
+        layout.Controls.Add(launchRow, 0, 7);
+
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    private static RoundedPanel BuildPathCard(
+        out RoundedTextBox pathInput,
+        out RoundedButton browseButton)
+    {
+        var card = new RoundedPanel
+        {
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12
+        };
+
+        card.Controls.Add(MakeCardIcon("\uE8B7", 9));
+
+        card.Controls.Add(new Label
+        {
+            Text = "DOSSIER DU JEU",
+            AutoSize = false,
+            Font = Theme.Ui(7.8f, FontStyle.Bold),
+            ForeColor = Theme.Accent,
+            Location = new Point(38, 9),
+            Size = new Size(220, 18),
+            BackColor = Color.Transparent
+        });
+
+        pathInput = new RoundedTextBox
+        {
+            Location = new Point(16, 32),
+            Size = new Size(500, 30)
+        };
+        card.Controls.Add(pathInput);
+
+        browseButton = new RoundedButton
+        {
+            Text = "Parcourir",
+            IconGlyph = "\uE8B7",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(203, 213, 225),
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Location = new Point(530, 32),
+            Size = new Size(104, 30)
+        };
+        card.Controls.Add(browseButton);
+
+        RoundedButton browseLocal = browseButton;
+        RoundedTextBox inputLocal = pathInput;
+        card.Resize += (_, _) =>
+        {
+            browseLocal.Left = Math.Max(140, card.ClientSize.Width - 8 - browseLocal.Width);
+            inputLocal.Width = Math.Max(120, browseLocal.Left - 10 - inputLocal.Left);
+        };
+
+        return card;
+    }
+
+    private RoundedPanel BuildStatusCard(
+        out RoundedPanel stateBadge,
+        out Label stateBadgeLabel,
+        out Label installedValue,
+        out Label installedFile,
+        out Label latestValue,
+        out Label bepInExValue)
+    {
+        var card = new RoundedPanel
+        {
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12,
+            ShowDividers = true
+        };
+
+        card.Controls.Add(MakeCardIcon("\uE83D", 12));
+
+        card.Controls.Add(new Label
+        {
+            Text = "ÉTAT DE L'INSTALLATION",
+            AutoSize = false,
+            Font = Theme.Ui(7.8f, FontStyle.Bold),
+            ForeColor = Theme.Accent,
+            Location = new Point(38, 12),
+            Size = new Size(260, 18),
+            BackColor = Color.Transparent
+        });
+
+        stateBadge = new RoundedPanel
+        {
+            CornerRadius = 12,
+            BackColor = Theme.GreenSoft,
+            BorderColor = Color.FromArgb(75, 150, 105),
+            BorderThickness = 1,
+            Size = new Size(96, 24),
+            Location = new Point(560, 10),
+            Tag = "stateBadge"
+        };
+        stateBadgeLabel = new Label
+        {
+            Text = "●  Prêt",
+            Dock = DockStyle.Fill,
+            Font = Theme.Ui(7.5f, FontStyle.Bold),
+            ForeColor = Theme.Green,
+            TextAlign = ContentAlignment.MiddleCenter,
+            AutoEllipsis = true,
+            BackColor = Color.Transparent
+        };
+        stateBadge.Controls.Add(stateBadgeLabel);
+        card.Controls.Add(stateBadge);
+
+        Label installedHeader = MakeColumnHeader("Version installée");
+        Label latestHeader = MakeColumnHeader("Dernière release");
+        Label bepInExHeader = MakeColumnHeader("BepInEx");
+        installedValue = MakeColumnValue();
+        latestValue = MakeColumnValue();
+        bepInExValue = MakeColumnValue();
+        installedFile = MakeColumnNote();
+        Label latestNote = MakeColumnNote();
+        Label bepInExNote = MakeColumnNote();
+        latestNote.Text = string.Empty;
+        bepInExNote.Text = string.Empty;
+        installedFile.Text = string.Empty;
+
+        card.Controls.Add(installedHeader);
+        card.Controls.Add(latestHeader);
+        card.Controls.Add(bepInExHeader);
+        card.Controls.Add(installedValue);
+        card.Controls.Add(latestValue);
+        card.Controls.Add(bepInExValue);
+        card.Controls.Add(installedFile);
+        card.Controls.Add(latestNote);
+        card.Controls.Add(bepInExNote);
+
+        installedHeader.Tag = "header";
+        latestHeader.Tag = "header";
+        bepInExHeader.Tag = "header";
+        installedValue.Tag = "value";
+        latestValue.Tag = "value";
+        bepInExValue.Tag = "value";
+        installedFile.Tag = "note";
+        latestNote.Tag = "note";
+        bepInExNote.Tag = "note";
+
+        card.Resize += (_, _) => LayoutStatusColumns(card);
+        LayoutStatusColumns(card);
+        return card;
+    }
+
+    private static Label MakeColumnHeader(string text)
+    {
+        return new Label
+        {
+            Text = text,
+            AutoSize = false,
+            Font = Theme.Ui(7.5f),
+            ForeColor = Theme.TextMuted,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            BackColor = Color.Transparent
+        };
+    }
+
+    private static Label MakeColumnValue()
+    {
+        return new Label
+        {
+            Text = "—",
+            AutoSize = false,
+            Font = Theme.Ui(9.5f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            BackColor = Color.Transparent
+        };
+    }
+
+    private static Label MakeColumnNote()
+    {
+        return new Label
+        {
+            Text = string.Empty,
+            AutoSize = false,
+            Font = Theme.Ui(7.5f),
+            ForeColor = Theme.TextFaint,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
+            BackColor = Color.Transparent
+        };
     }
 
     private static void LayoutStatusColumns(RoundedPanel? card)
@@ -1026,18 +913,18 @@ public sealed class MainForm : Form
             return;
         }
 
-        int padding = 14;
+        int padding = 16;
         int width = card.ClientSize.Width;
         int[] xs =
         {
             padding,
-            Math.Max(padding + 100, width * 35 / 100),
-            Math.Max(padding + 200, width * 69 / 100)
+            Math.Max(padding + 140, width * 33 / 100),
+            Math.Max(padding + 280, width * 66 / 100)
         };
         int[] widths =
         {
-            Math.Max(80, xs[1] - xs[0] - 10),
-            Math.Max(80, xs[2] - xs[1] - 10),
+            Math.Max(80, xs[1] - xs[0] - 12),
+            Math.Max(80, xs[2] - xs[1] - 12),
             Math.Max(80, width - xs[2] - padding)
         };
 
@@ -1055,19 +942,19 @@ public sealed class MainForm : Form
         {
             if (i < headers.Count)
             {
-                headers[i].Location = new Point(xs[i], 36);
+                headers[i].Location = new Point(xs[i], 40);
                 headers[i].Size = new Size(widths[i], 16);
             }
 
             if (i < values.Count)
             {
-                values[i].Location = new Point(xs[i], 52);
+                values[i].Location = new Point(xs[i], 57);
                 values[i].Size = new Size(widths[i], 20);
             }
 
             if (i < notes.Count)
             {
-                notes[i].Location = new Point(xs[i], 71);
+                notes[i].Location = new Point(xs[i], 78);
                 notes[i].Size = new Size(widths[i], 15);
             }
         }
@@ -1076,10 +963,804 @@ public sealed class MainForm : Form
         {
             if (Equals(badge.Tag, "stateBadge"))
             {
-                badge.Left = card.ClientSize.Width - 6 - badge.Width;
-                badge.Top = 9;
+                badge.Left = card.ClientSize.Width - 8 - badge.Width;
+                badge.Top = 10;
             }
         }
+    }
+
+    private static TableLayoutPanel BuildActions(
+        out RoundedButton installButton,
+        out RoundedButton checkButton,
+        out RoundedButton localDllButton)
+    {
+        var firstRow = BuildButtonRow(3, 10);
+
+        installButton = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Installer / Mettre à jour",
+            IconGlyph = "\uE896",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(38, 26, 4),
+            BackColor = Theme.Accent,
+            HoverBackColor = Color.FromArgb(251, 191, 36),
+            PressedBackColor = Color.FromArgb(217, 119, 6),
+            ForeColor = Color.FromArgb(30, 20, 2),
+            BorderColor = Color.FromArgb(196, 122, 5),
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Sheen = 0.2f,
+            Font = Theme.Ui(9.2f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+        checkButton = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Vérifier les mises à jour",
+            IconGlyph = "\uE72C",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(203, 213, 225),
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+        localDllButton = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Installer un DLL",
+            IconGlyph = "\uE8E5",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(203, 213, 225),
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+        firstRow.Controls.Add(installButton, 0, 0);
+        firstRow.Controls.Add(checkButton, 2, 0);
+        firstRow.Controls.Add(localDllButton, 4, 0);
+
+        return firstRow;
+    }
+
+    private static RoundedPanel BuildModulesCard(
+        out CheckBox tobacco,
+        out CheckBox undergroundToCheck,
+        out CheckBox restock)
+    {
+        var card = new RoundedPanel
+        {
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12
+        };
+
+        card.Controls.Add(MakeCardIcon("\uE713", 10));
+
+        card.Controls.Add(new Label
+        {
+            Text = "MODULES AU LANCEMENT",
+            AutoSize = false,
+            Font = Theme.Ui(7.8f, FontStyle.Bold),
+            ForeColor = Theme.Accent,
+            Location = new Point(38, 10),
+            Size = new Size(260, 18),
+            BackColor = Color.Transparent
+        });
+
+        var hint = new Label
+        {
+            Text = "Appliqué au prochain lancement",
+            AutoSize = false,
+            Font = Theme.Ui(7.5f),
+            ForeColor = Theme.TextFaint,
+            TextAlign = ContentAlignment.MiddleRight,
+            Location = new Point(400, 10),
+            Size = new Size(256, 18),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            BackColor = Color.Transparent
+        };
+        card.Controls.Add(hint);
+
+        tobacco = CreateModuleCheckBox("Rayon Tabac", 38, 190);
+        undergroundToCheck = CreateModuleCheckBox("Sous-sol clandestin", 250, 210);
+        restock = CreateModuleCheckBox("Réassort intelligent", 470, 220);
+
+        card.Controls.Add(tobacco);
+        card.Controls.Add(undergroundToCheck);
+        card.Controls.Add(restock);
+        return card;
+    }
+
+    private static CheckBox CreateModuleCheckBox(string text, int left, int width)
+    {
+        return new RoundedCheckBox
+        {
+            Text = text,
+            Location = new Point(left, 38),
+            Size = new Size(width, 24),
+            Checked = true
+        };
+    }
+
+    private RoundedPanel BuildTeaserCard(out Label title, out Label meta)
+    {
+        var card = new RoundedPanel
+        {
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12
+        };
+
+        card.Controls.Add(MakeCardIcon("\uE8EC", 12));
+
+        card.Controls.Add(new Label
+        {
+            Text = "DERNIÈRE RELEASE",
+            AutoSize = false,
+            Font = Theme.Ui(7.8f, FontStyle.Bold),
+            ForeColor = Theme.Accent,
+            Location = new Point(38, 12),
+            Size = new Size(280, 18),
+            BackColor = Color.Transparent
+        });
+
+        title = new Label
+        {
+            Text = "Aucune release récupérée",
+            AutoSize = false,
+            Height = 24,
+            Font = Theme.Ui(12f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            AutoEllipsis = true,
+            Location = new Point(38, 34),
+            BackColor = Color.Transparent
+        };
+        card.Controls.Add(title);
+
+        meta = new Label
+        {
+            Text = "Lance une vérification pour charger les actualités du dépôt.",
+            AutoSize = false,
+            Height = 18,
+            Font = Theme.Ui(8f),
+            ForeColor = Theme.TextMuted,
+            AutoEllipsis = true,
+            Location = new Point(38, 60),
+            BackColor = Color.Transparent
+        };
+        card.Controls.Add(meta);
+
+        var readButton = new RoundedButton
+        {
+            Text = "Lire les actualités",
+            IconGlyph = "\uE76C",
+            IconFont = Theme.Icon(9.5f),
+            IconColor = Theme.Accent,
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Size = new Size(172, 34)
+        };
+        readButton.Click += (_, _) => ShowPage(LauncherPage.News);
+        card.Controls.Add(readButton);
+
+        Label titleLocal = title;
+        Label metaLocal = meta;
+        card.Resize += (_, _) =>
+        {
+            readButton.Location = new Point(
+                Math.Max(300, card.ClientSize.Width - 16 - readButton.Width),
+                30);
+            int available = Math.Max(180, readButton.Left - 46);
+            titleLocal.Width = available;
+            metaLocal.Width = available;
+        };
+
+        return card;
+    }
+
+    private TableLayoutPanel BuildLaunchRow(
+        out RoundedButton launch,
+        out RoundedButton vanilla,
+        out RoundedButton openFolder)
+    {
+        var row = BuildButtonRow(3, 10, new[] { 0f, 158f, 158f });
+
+        launch = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Lancer le jeu",
+            IconGlyph = "\uE768",
+            IconFont = Theme.Icon(11f),
+            IconColor = Color.FromArgb(8, 40, 22),
+            BackColor = Color.FromArgb(34, 197, 94),
+            HoverBackColor = Color.FromArgb(74, 222, 128),
+            PressedBackColor = Color.FromArgb(22, 163, 74),
+            ForeColor = Color.FromArgb(6, 32, 18),
+            BorderColor = Color.FromArgb(21, 128, 61),
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Sheen = 0.22f,
+            Font = Theme.Ui(9.6f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+
+        vanilla = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "Vanilla",
+            IconGlyph = "\uE7F4",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(203, 213, 225),
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+
+        openFolder = new RoundedButton
+        {
+            Dock = DockStyle.Fill,
+            Text = "BepInEx",
+            IconGlyph = "\uE8B7",
+            IconFont = Theme.Icon(10f),
+            IconColor = Color.FromArgb(203, 213, 225),
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 11,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Margin = Padding.Empty
+        };
+
+        row.Controls.Add(launch, 0, 0);
+        row.Controls.Add(vanilla, 2, 0);
+        row.Controls.Add(openFolder, 4, 0);
+        return row;
+    }
+
+    // ----------------------------------------------------------- page: news
+
+    private Panel BuildNewsPage()
+    {
+        var page = new Panel { BackColor = Color.Transparent, Padding = Padding.Empty };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+
+        header.Controls.Add(new Label
+        {
+            Text = "Actualités",
+            AutoSize = true,
+            Font = Theme.Ui(18f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            BackColor = Color.Transparent,
+            Location = new Point(2, 2)
+        });
+        header.Controls.Add(new Label
+        {
+            Text = "Notes de version publiées sur GitHub, lues et mises en forme ici.",
+            AutoSize = true,
+            Font = Theme.Ui(8.5f),
+            ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent,
+            Location = new Point(3, 32)
+        });
+
+        _newsRefreshButton = new RoundedButton
+        {
+            Text = "Rafraîchir",
+            IconGlyph = "\uE72C",
+            IconFont = Theme.Icon(9.5f),
+            IconColor = Theme.Text,
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(36, 54, 80),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Size = new Size(122, 32),
+            Location = new Point(520, 6),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        header.Controls.Add(_newsRefreshButton);
+
+        RoundedButton github = new RoundedButton
+        {
+            Text = "Ouvrir GitHub",
+            IconGlyph = "\uE8A7",
+            IconFont = Theme.Icon(9.5f),
+            IconColor = Theme.Accent,
+            BackColor = Theme.Surface,
+            HoverBackColor = Color.FromArgb(30, 41, 57),
+            PressedBackColor = Color.FromArgb(31, 44, 62),
+            ForeColor = Theme.Accent,
+            BorderColor = Color.FromArgb(96, 65, 16),
+            BorderThickness = 1,
+            CornerRadius = 9,
+            Font = Theme.Ui(9f, FontStyle.Bold),
+            Size = new Size(142, 32),
+            Location = new Point(644, 6),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        github.Click += (_, _) => OpenUrl(GitHubService.ReleasesUrl);
+        header.Controls.Add(github);
+
+        header.Resize += (_, _) =>
+        {
+            github.Left = Math.Max(320, header.ClientSize.Width - github.Width);
+            _newsRefreshButton.Left = github.Left - _newsRefreshButton.Width - 8;
+        };
+
+        layout.Controls.Add(header, 0, 0);
+
+        _newsFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        _newsFlow.Resize += NewsFlow_Resize;
+        layout.Controls.Add(_newsFlow, 0, 1);
+
+        _newsStatus = new Label
+        {
+            Text = "Chargement des actualités...",
+            AutoSize = false,
+            Font = Theme.Ui(8.8f),
+            ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent,
+            Location = new Point(4, 70),
+            Size = new Size(520, 22)
+        };
+        page.Controls.Add(layout);
+        page.Controls.Add(_newsStatus);
+        _newsStatus.BringToFront();
+
+        return page;
+    }
+
+    private async Task ShowNewsAsync()
+    {
+        if (!_newsLoaded && !_newsLoading)
+        {
+            await LoadNewsAsync();
+        }
+    }
+
+    private async Task LoadNewsAsync()
+    {
+        if (_newsLoading)
+        {
+            return;
+        }
+
+        _newsLoading = true;
+        _newsRefreshButton.Enabled = false;
+        _newsStatus.Visible = true;
+        _newsStatus.Text = "Chargement des actualités GitHub...";
+
+        try
+        {
+            IReadOnlyList<ReleaseInfo> releases = await _gitHub.GetReleasesAsync(6, _lifetime.Token);
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _releases = releases;
+            _newsLoaded = true;
+            _newsFlow.Controls.Clear();
+
+            if (releases.Count == 0)
+            {
+                _newsStatus.Visible = true;
+                _newsStatus.Text = "Aucune release publiée pour le moment sur le dépôt.";
+                return;
+            }
+
+            _newsStatus.Visible = false;
+            BuildNewsCards();
+            Log($"{releases.Count} actualité(s) chargée(s) depuis GitHub.");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _newsStatus.Visible = true;
+            _newsStatus.Text = "Impossible de charger les actualités : " + ex.Message;
+            Log("Erreur GitHub (actualités) : " + ex.Message);
+        }
+        finally
+        {
+            _newsRefreshButton.Enabled = true;
+            _newsLoading = false;
+        }
+    }
+
+    private void BuildNewsCards()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        int width = Math.Max(420, _newsFlow.ClientSize.Width - 24);
+        _newsRenderedWidth = _newsFlow.ClientSize.Width;
+
+        _newsFlow.SuspendLayout();
+        _newsFlow.Controls.Clear();
+
+        foreach (ReleaseInfo release in _releases)
+        {
+            _newsFlow.Controls.Add(BuildNewsCard(release, width));
+        }
+
+        _newsFlow.ResumeLayout();
+    }
+
+    private Control BuildNewsCard(ReleaseInfo release, int width)
+    {
+        int inner = Math.Max(260, width - 40);
+
+        var card = new RoundedPanel
+        {
+            Width = width,
+            BackColor = Theme.Surface,
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12,
+            Margin = new Padding(0, 0, 0, 12)
+        };
+
+        int y = 16;
+
+        string tagText = string.IsNullOrWhiteSpace(release.TagName) ? "release" : release.TagName;
+        bool showTag = !string.Equals(
+            release.TagName,
+            release.Title,
+            StringComparison.OrdinalIgnoreCase);
+
+        var tag = new RoundedPanel
+        {
+            CornerRadius = 10,
+            BackColor = release.Prerelease ? Theme.BlueSoft : Theme.AccentSoft,
+            BorderColor = release.Prerelease
+                ? Color.FromArgb(46, 84, 128)
+                : Color.FromArgb(96, 65, 16),
+            BorderThickness = 1,
+            Height = 22
+        };
+        Size tagSize = TextRenderer.MeasureText(
+            tagText,
+            Theme.Ui(7.5f, FontStyle.Bold),
+            Size.Empty,
+            TextFormatFlags.NoPadding);
+        tag.Width = Math.Max(52, tagSize.Width + 22);
+        tag.Location = new Point(width - 20 - tag.Width, 16);
+        tag.Controls.Add(new Label
+        {
+            Text = tagText,
+            Dock = DockStyle.Fill,
+            Font = Theme.Ui(7.5f, FontStyle.Bold),
+            ForeColor = release.Prerelease ? Theme.Blue : Theme.Accent,
+            TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = Color.Transparent
+        });
+
+        if (showTag)
+        {
+            card.Controls.Add(tag);
+        }
+
+        card.Controls.Add(new Label
+        {
+            Text = release.Title,
+            AutoSize = false,
+            Height = 24,
+            Width = Math.Max(140, inner - (showTag ? tag.Width + 16 : 0)),
+            Location = new Point(20, y),
+            Font = Theme.Ui(11.5f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            AutoEllipsis = true,
+            BackColor = Color.Transparent
+        });
+        y += 27;
+
+        card.Controls.Add(new Label
+        {
+            Text = BuildReleaseMeta(release),
+            AutoSize = false,
+            Height = 18,
+            Width = inner,
+            Location = new Point(20, y),
+            Font = Theme.Ui(8f),
+            ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent
+        });
+        y += 25;
+
+        var body = new RichTextBox
+        {
+            Location = new Point(20, y),
+            Width = inner,
+            BorderStyle = BorderStyle.None,
+            ReadOnly = true,
+            ScrollBars = RichTextBoxScrollBars.None,
+            WordWrap = true,
+            DetectUrls = false,
+            BackColor = Theme.Surface,
+            ForeColor = Theme.Text,
+            Font = Theme.Ui(9f),
+            Cursor = Cursors.Default,
+            TabStop = false,
+            ShortcutsEnabled = true
+        };
+        MarkdownRenderer.Render(body, release.Body);
+        body.Height = Math.Max(26, MarkdownRenderer.Fit(body));
+        card.Controls.Add(body);
+        y += body.Height + 4;
+
+        var link = new LinkLabel
+        {
+            Text = "Ouvrir sur GitHub",
+            AutoSize = true,
+            Location = new Point(19, y),
+            Font = Theme.Ui(8.2f),
+            LinkColor = Theme.Blue,
+            ActiveLinkColor = Theme.Accent,
+            VisitedLinkColor = Theme.Blue,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            BackColor = Color.Transparent
+        };
+        link.LinkClicked += (_, _) => OpenUrl(
+            string.IsNullOrWhiteSpace(release.HtmlUrl)
+                ? GitHubService.RepositoryUrl
+                : release.HtmlUrl);
+        card.Controls.Add(link);
+        y += link.PreferredHeight + 14;
+
+        card.Height = y;
+        return card;
+    }
+
+    private static string BuildReleaseMeta(ReleaseInfo release)
+    {
+        var parts = new List<string>();
+
+        if (release.PublishedAt is DateTimeOffset published)
+        {
+            parts.Add(published.ToLocalTime().ToString("d MMMM yyyy", FrenchCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(release.Author))
+        {
+            parts.Add("par " + release.Author);
+        }
+
+        if (release.Prerelease)
+        {
+            parts.Add("pré-release");
+        }
+
+        return parts.Count == 0 ? "date inconnue" : string.Join("   ·   ", parts);
+    }
+
+    private void NewsFlow_Resize(object? sender, EventArgs e)
+    {
+        if (_releases.Count == 0 || _page != LauncherPage.News)
+        {
+            return;
+        }
+
+        _newsLayoutTimer.Stop();
+        _newsLayoutTimer.Start();
+    }
+
+    private void NewsLayoutTimer_Tick(object? sender, EventArgs e)
+    {
+        _newsLayoutTimer.Stop();
+
+        if (IsDisposed || _releases.Count == 0 || _page != LauncherPage.News)
+        {
+            return;
+        }
+
+        if (Math.Abs(_newsFlow.ClientSize.Width - _newsRenderedWidth) < 12)
+        {
+            return;
+        }
+
+        BuildNewsCards();
+    }
+
+    // -------------------------------------------------------- page: journal
+
+    private Panel BuildJournalPage()
+    {
+        var page = new Panel { BackColor = Color.Transparent, Padding = Padding.Empty };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        header.Controls.Add(new Label
+        {
+            Text = "Journal",
+            AutoSize = true,
+            Font = Theme.Ui(18f, FontStyle.Bold),
+            ForeColor = Theme.Text,
+            BackColor = Color.Transparent,
+            Location = new Point(2, 2)
+        });
+        header.Controls.Add(new Label
+        {
+            Text = "Toutes les opérations du launcher, dans l'ordre.",
+            AutoSize = true,
+            Font = Theme.Ui(8.5f),
+            ForeColor = Theme.TextMuted,
+            BackColor = Color.Transparent,
+            Location = new Point(3, 32)
+        });
+
+        _clearLogButton = new RoundedButton
+        {
+            Text = "Effacer",
+            IconGlyph = "\uE74D",
+            IconFont = Theme.Icon(9.5f),
+            IconColor = Theme.TextMuted,
+            BackColor = Theme.SurfaceRaised,
+            HoverBackColor = Color.FromArgb(34, 52, 78),
+            PressedBackColor = Color.FromArgb(28, 44, 67),
+            ForeColor = Theme.Text,
+            CornerRadius = 8,
+            Font = Theme.Ui(8.2f),
+            Size = new Size(104, 32),
+            Location = new Point(560, 6),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        header.Controls.Add(_clearLogButton);
+        header.Resize += (_, _) =>
+        {
+            _clearLogButton.Left = Math.Max(200, header.ClientSize.Width - _clearLogButton.Width);
+        };
+
+        layout.Controls.Add(header, 0, 0);
+
+        var card = new RoundedPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(12, 17, 26),
+            BorderColor = Theme.Border,
+            BorderThickness = 1,
+            CornerRadius = 12,
+            Padding = new Padding(14, 12, 14, 12)
+        };
+
+        _logBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = Color.FromArgb(12, 17, 26),
+            ForeColor = Color.FromArgb(203, 213, 225),
+            BorderStyle = BorderStyle.None,
+            Font = new Font("Consolas", 8.2f),
+            WordWrap = false,
+            Margin = Padding.Empty
+        };
+        card.Controls.Add(_logBox);
+
+        layout.Controls.Add(card, 0, 1);
+        page.Controls.Add(layout);
+
+        return page;
+    }
+
+    // ---------------------------------------------------------------- events
+
+    private void WireEvents()
+    {
+        _browseButton.Click += BrowseButton_Click;
+        _installButton.Click += InstallButton_Click;
+        _checkButton.Click += CheckButton_Click;
+        _localDllButton.Click += LocalDllButton_Click;
+        _launchButton.Click += (_, _) => LaunchGame(withoutMods: false);
+        _vanillaButton.Click += (_, _) => LaunchGame(withoutMods: true);
+        _openFolderButton.Click += OpenFolderButton_Click;
+        _clearLogButton.Click += (_, _) => _logBox.Clear();
+        _installSelfButton.Click += InstallSelfButton_Click;
+        _releasesButton.Click += (_, _) => OpenUrl(GitHubService.ReleasesUrl);
+        _newsRefreshButton.Click += async (_, _) =>
+        {
+            _newsLoaded = false;
+            await LoadNewsAsync();
+        };
+
+        _homeNav.Click += (_, _) => ShowPage(LauncherPage.Home);
+        _newsNav.Click += (_, _) => ShowPage(LauncherPage.News);
+        _journalNav.Click += (_, _) => ShowPage(LauncherPage.Journal);
+
+        _tobaccoCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
+        _undergroundCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
+        _restockCheck.CheckedChanged += ModuleCheckBox_CheckedChanged;
+
+        _toolTip.SetToolTip(_browseButton, "Choisir le dossier qui contient Supermarket Together.exe");
+        _toolTip.SetToolTip(_localDllButton, "Installer ou réparer le mod depuis un DLL déjà compilé");
+        _toolTip.SetToolTip(_launchButton, "Lancer Supermarket Together avec BepInEx et ItemAdder");
+        _toolTip.SetToolTip(_vanillaButton, "Lancer le jeu sans BepInEx ni ItemAdder");
+        _toolTip.SetToolTip(_openFolderButton, "Ouvrir BepInEx\\plugins dans l'Explorateur");
+        _toolTip.SetToolTip(_stateBadge, "État actuel de l'installation");
+        _toolTip.SetToolTip(_newsRefreshButton, "Recharger les actualités depuis GitHub");
+        _toolTip.SetToolTip(
+            _tobaccoCheck,
+            "Coche pour lancer avec le rayon tabac et son palier de compétences. " +
+            "Garde-la cochée sur une sauvegarde qui contient déjà des produits tabac.");
+        _toolTip.SetToolTip(
+            _undergroundCheck,
+            "Coche pour lancer avec le sous-sol clandestin (culture, police, raids). " +
+            "Tous les joueurs doivent avoir le même réglage.");
+        _toolTip.SetToolTip(
+            _restockCheck,
+            "Les employés de réassort rangent les produits restés en réserve " +
+            "sur l'étagère compatible la plus proche.");
     }
 
     private void LoadSavedGamePath()
@@ -1116,9 +1797,12 @@ public sealed class MainForm : Form
     {
         MaximizedBounds = Screen.FromControl(this).WorkingArea;
         UpdateWindowRegion();
+
         await RunOperationAsync(
             "Recherche du jeu et vérification des releases...",
             () => RefreshStatusAsync(checkRelease: true));
+
+        await OfferInstallAsync();
     }
 
     private async void BrowseButton_Click(object? sender, EventArgs e)
@@ -1185,14 +1869,24 @@ public sealed class MainForm : Form
             });
     }
 
-    private void LaunchButton_Click(object? sender, EventArgs e)
+    private void OpenFolderButton_Click(object? sender, EventArgs e)
     {
-        LaunchGame(withoutMods: false);
-    }
-
-    private void VanillaButton_Click(object? sender, EventArgs e)
-    {
-        LaunchGame(withoutMods: true);
+        try
+        {
+            string gamePath = RequireGamePath();
+            string plugins = GameLocator.GetPluginsPath(gamePath);
+            Directory.CreateDirectory(plugins);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{plugins}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
     }
 
     private void LaunchGame(bool withoutMods)
@@ -1243,24 +1937,140 @@ public sealed class MainForm : Form
         }
     }
 
-    private void OpenFolderButton_Click(object? sender, EventArgs e)
+    // -------------------------------------------------------------- launcher
+
+    private async void InstallSelfButton_Click(object? sender, EventArgs e)
     {
-        try
+        if (LauncherInstaller.IsInstalled)
         {
-            string gamePath = RequireGamePath();
-            string plugins = GameLocator.GetPluginsPath(gamePath);
-            Directory.CreateDirectory(plugins);
+            DialogResult answer = MessageBox.Show(
+                this,
+                "Désinstaller ItemAdder Launcher de ce PC ?\n\n" +
+                "Les raccourcis du bureau, du menu Démarrer et l'entrée « Applications installées » " +
+                "seront supprimés.\n\n" +
+                "Le mod installé dans le jeu et tes réglages ne sont pas touchés.",
+                "Désinstaller le launcher",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (answer == DialogResult.Yes)
+            {
+                await RunOperationAsync("Désinstallation du launcher...", UninstallSelfAsync);
+            }
+
+            return;
+        }
+
+        await RunOperationAsync("Installation du launcher sur ce PC...", InstallSelfAsync);
+    }
+
+    private Task InstallSelfAsync()
+    {
+        LauncherInstaller.Install(new Progress<string>(Log));
+        UpdateInstallButton();
+        Log("Le launcher est installé : raccourcis Bureau et menu Démarrer, " +
+            "entrée « Applications installées ».");
+        Log($"Mises à jour : elles remplaceront {LauncherInstaller.InstalledExecutablePath} " +
+            "et les raccourcis resteront valides.");
+
+        if (LauncherInstaller.IsRunningInstalledCopy)
+        {
+            return Task.CompletedTask;
+        }
+
+        DialogResult answer = MessageBox.Show(
+            this,
+            "ItemAdder Launcher est installé sur ce PC.\n\n" +
+            "Ouvrir la version installée maintenant ? C'est elle qui recevra les mises à jour " +
+            "automatiques.",
+            "Installation terminée",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer == DialogResult.Yes)
+        {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "explorer.exe",
-                Arguments = $"\"{plugins}\"",
+                FileName = LauncherInstaller.InstalledExecutablePath,
+                WorkingDirectory = LauncherInstaller.InstallDirectory,
                 UseShellExecute = true
             });
+            Close();
         }
-        catch (Exception ex)
+
+        return Task.CompletedTask;
+    }
+
+    private Task UninstallSelfAsync()
+    {
+        LauncherInstaller.Uninstall(new Progress<string>(Log));
+        UpdateInstallButton();
+
+        if (LauncherInstaller.IsRunningInstalledCopy)
         {
-            ShowError(ex.Message);
+            Log("Fermeture du launcher pour terminer la suppression du dossier d'installation.");
+            Close();
+            return Task.CompletedTask;
         }
+
+        Log("Le launcher a été retiré de ce PC. Le mod et les réglages restent en place.");
+        return Task.CompletedTask;
+    }
+
+    private void UpdateInstallButton()
+    {
+        bool installed = LauncherInstaller.IsInstalled;
+
+        _installSelfButton.Text = installed ? "Désinstaller le launcher" : "Installer sur le PC";
+        _installSelfButton.IconGlyph = installed ? "\uE74D" : "\uE896";
+        _installSelfButton.IconColor = installed ? Theme.TextMuted : Theme.Accent;
+        _installSelfButton.ForeColor = installed ? Theme.TextMuted : Theme.Text;
+        _installSelfButton.Invalidate();
+
+        _toolTip.SetToolTip(
+            _installSelfButton,
+            installed
+                ? "Désinstalle le launcher : raccourcis, entrée Windows et dossier " +
+                  "d'installation. Le mod dans le jeu reste en place."
+                : "Installe le launcher sur ce PC : raccourci sur le bureau, menu Démarrer " +
+                  "et entrée dans « Applications installées ». Les mises à jour remplaceront " +
+                  "cette installation.");
+    }
+
+    private async Task OfferInstallAsync()
+    {
+        if (LauncherInstaller.IsInstalled)
+        {
+            return;
+        }
+
+        LauncherSettings settings = SettingsStore.Load();
+        if (settings.InstallOffered == true)
+        {
+            return;
+        }
+
+        SettingsStore.MarkInstallOffered();
+
+        DialogResult answer = MessageBox.Show(
+            this,
+            "Installer ItemAdder Launcher sur ce PC ?\n\n" +
+            "- une icône sur le bureau\n" +
+            "- un raccourci dans le menu Démarrer\n" +
+            "- une entrée dans « Applications installées »\n\n" +
+            "Les mises à jour remplaceront automatiquement cette installation.\n" +
+            "Oui = installer maintenant, Non = garder le launcher en fichier portable.",
+            "Installer le launcher",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+        {
+            Log("Installation refusée : « Installer sur le PC » reste disponible dans le menu de gauche.");
+            return;
+        }
+
+        await RunOperationAsync("Installation du launcher sur ce PC...", InstallSelfAsync);
     }
 
     private async Task InstallLatestReleaseAsync()
@@ -1436,7 +2246,8 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (!LauncherUpdater.CanReplaceExecutable(out string reason))
+        string updateTarget = LauncherInstaller.UpdateTargetPath;
+        if (!LauncherUpdater.CanReplaceExecutable(updateTarget, out string reason))
         {
             throw new InvalidOperationException(reason);
         }
@@ -1455,8 +2266,8 @@ public sealed class MainForm : Form
         }
 
         Log($"Installation du launcher v{downloadedVersion?.ToString() ?? remote.ToString()} " +
-            "et redémarrage...");
-        LauncherUpdater.ScheduleReplaceAndRestart(downloaded);
+            $"dans {updateTarget} et redémarrage...");
+        LauncherUpdater.ScheduleReplaceAndRestart(updateTarget, downloaded, Environment.ProcessId);
         Close();
     }
 
@@ -1466,12 +2277,16 @@ public sealed class MainForm : Form
         {
             _latestValue.Text = "aucune";
             _latestValue.ForeColor = Theme.TextMuted;
+            _teaserTitle.Text = "Aucune release récupérée";
+            _teaserMeta.Text = "Lance une vérification pour charger les actualités du dépôt.";
             Log("Aucune release GitHub disponible pour le moment.");
             return;
         }
 
         _latestValue.Text = _latestRelease.TagName;
         _latestValue.ForeColor = Theme.Text;
+        _teaserTitle.Text = _latestRelease.Title;
+        _teaserMeta.Text = BuildReleaseMeta(_latestRelease) + "   ·   " + _latestRelease.TagName;
         Log($"Dernière release vérifiée : {_latestRelease.TagName}.");
     }
 
@@ -1519,7 +2334,7 @@ public sealed class MainForm : Form
             Size.Empty,
             TextFormatFlags.NoPadding).Width + 24;
         _stateBadge.Width = Math.Clamp(badgeWidth, 76, 150);
-        _stateBadge.Left = _statusCard.ClientSize.Width - 6 - _stateBadge.Width;
+        _stateBadge.Left = _statusCard.ClientSize.Width - 8 - _stateBadge.Width;
         _stateBadge.BackColor = color == Theme.Green
             ? Theme.GreenSoft
             : color == Theme.Red
@@ -1596,7 +2411,9 @@ public sealed class MainForm : Form
         _launchButton.Enabled = !busy;
         _vanillaButton.Enabled = !busy;
         _openFolderButton.Enabled = !busy;
+        _installSelfButton.Enabled = !busy;
         _clearLogButton.Enabled = !busy;
+        _newsRefreshButton.Enabled = !busy;
         UseWaitCursor = busy;
     }
 
@@ -1633,65 +2450,55 @@ public sealed class MainForm : Form
             MessageBoxIcon.Error);
     }
 
-    private void ToggleMaximize()
-    {
-        MaximizedBounds = Screen.FromControl(this).WorkingArea;
-        WindowState = WindowState == FormWindowState.Maximized
-            ? FormWindowState.Normal
-            : FormWindowState.Maximized;
-        UpdateWindowRegion();
-    }
-
-    private void UpdateWindowRegion()
-    {
-        if (!IsHandleCreated)
-        {
-            return;
-        }
-
-        if (WindowState == FormWindowState.Maximized || WindowState == FormWindowState.Minimized)
-        {
-            Region = null;
-            return;
-        }
-
-        using var path = new GraphicsPath();
-        var rect = new Rectangle(0, 0, Width, Height);
-        const int radius = 12;
-        float diameter = radius * 2f;
-        path.AddArc(rect.Left, rect.Top, diameter, diameter, 180, 90);
-        path.AddArc(rect.Right - diameter, rect.Top, diameter, diameter, 270, 90);
-        path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
-        path.AddArc(rect.Left, rect.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-
-        Region? oldRegion = Region;
-        Region = new Region(path);
-        oldRegion?.Dispose();
-    }
-
-    private void EnableDrag(Control control)
-    {
-        control.MouseDown += (_, e) =>
-        {
-            if (e.Button != MouseButtons.Left)
-            {
-                return;
-            }
-
-            ReleaseCapture();
-            SendMessage(Handle, WmNcLButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
-        };
-
-        control.DoubleClick += (_, _) => ToggleMaximize();
-    }
+    // --------------------------------------------------------------- helpers
 
     private static string GetLauncherVersion()
     {
-        Version? version = typeof(MainForm).Assembly.GetName().Version;
-        return version is null
-            ? "v1.3.0"
-            : $"v{version.Major}.{version.Minor}.{version.Build}";
+        Version version = LauncherUpdater.CurrentVersion;
+        return $"v{version.Major}.{version.Minor}.{version.Build}";
+    }
+
+    private static Icon LoadAppIcon()
+    {
+        try
+        {
+            string? path = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                Icon? icon = Icon.ExtractAssociatedIcon(path);
+                if (icon is not null)
+                {
+                    return icon;
+                }
+            }
+        }
+        catch
+        {
+            // L'icône générique suffit si l'exécutable n'en contient pas.
+        }
+
+        return SystemIcons.Application;
+    }
+
+    private static Image? LoadEmbeddedImage(string name)
+    {
+        try
+        {
+            using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+            if (stream is null)
+            {
+                return null;
+            }
+
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            memory.Position = 0;
+            return Image.FromStream(memory);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static void OpenUrl(string url)

@@ -8,9 +8,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ItemAdderLauncher</AssemblyName>
     <RootNamespace>ItemAdderLauncher</RootNamespace>
-    <Version>1.3.0</Version>
+    <Version>1.5.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\background.jpg" LogicalName="ItemAdder.background.jpg" />
+    <EmbeddedResource Include="Assets\logo.png" LogicalName="ItemAdder.logo.png" />
+  </ItemGroup>
 
 </Project>

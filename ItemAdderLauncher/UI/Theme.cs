@@ -35,10 +35,31 @@ internal static class Theme
     {
         if (!IconFontCache.TryGetValue(size, out Font? font))
         {
-            font = new Font("Segoe MDL2 Assets", size, FontStyle.Regular, GraphicsUnit.Point);
+            font = new Font(IconFamily, size, FontStyle.Regular, GraphicsUnit.Point);
             IconFontCache[size] = font;
         }
 
         return font;
     }
+
+    /// <summary>
+    /// Police d'icônes : Fluent (Windows 11) quand elle existe, sinon la police
+    /// MDL2 de Windows 10. Les mêmes points de code y dessinent les mêmes
+    /// icônes, avec un trait plus net sous Fluent.
+    /// </summary>
+    private static string ResolveIconFamily()
+    {
+        foreach (string candidate in new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" })
+        {
+            using var probe = new Font(candidate, 9f, FontStyle.Regular, GraphicsUnit.Point);
+            if (string.Equals(probe.Name, candidate, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return "Segoe UI Symbol";
+    }
+
+    private static readonly string IconFamily = ResolveIconFamily();
 }

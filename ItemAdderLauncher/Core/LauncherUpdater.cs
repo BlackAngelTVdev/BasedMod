@@ -57,7 +57,12 @@ public static class LauncherUpdater
 
     public static bool CanReplaceExecutable(out string reason)
     {
-        string directory = Path.GetDirectoryName(CurrentExecutablePath) ?? string.Empty;
+        return CanReplaceExecutable(CurrentExecutablePath, out reason);
+    }
+
+    public static bool CanReplaceExecutable(string executablePath, out string reason)
+    {
+        string directory = Path.GetDirectoryName(executablePath) ?? string.Empty;
         if (directory.Length == 0)
         {
             reason = "Le dossier du launcher est introuvable.";
@@ -154,6 +159,59 @@ public static class LauncherUpdater
             CreateNoWindow = true,
             WorkingDirectory = Path.GetTempPath()
         });
+    }
+
+    /// <summary>
+    /// Supprime les restes des mises à jour précédentes (exécutable téléchargé,
+    /// scripts de remplacement). Appelé au démarrage.
+    /// </summary>
+    public static void CleanupUpdateArtifacts()
+    {
+        try
+        {
+            string root = Path.Combine(Path.GetTempPath(), "ItemAdderLauncher");
+            if (!Directory.Exists(root))
+            {
+                return;
+            }
+
+            // Les éléments récents peuvent encore être utilisés par une mise à jour en cours.
+            DateTime threshold = DateTime.Now.AddMinutes(-10);
+
+            foreach (string directory in Directory.EnumerateDirectories(root, "update-*"))
+            {
+                try
+                {
+                    if (Directory.GetCreationTime(directory) < threshold)
+                    {
+                        Directory.Delete(directory, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // Un dossier encore utilisé sera supprimé au prochain démarrage.
+                }
+            }
+
+            foreach (string script in Directory.EnumerateFiles(Path.GetTempPath(), "itemadder-*.cmd"))
+            {
+                try
+                {
+                    if (File.GetCreationTime(script) < threshold)
+                    {
+                        File.Delete(script);
+                    }
+                }
+                catch
+                {
+                    // Idem : un script en cours d'exécution se supprime lui-même.
+                }
+            }
+        }
+        catch
+        {
+            // Le nettoyage du temporaire est purement domestique.
+        }
     }
 
     private static string CreateUpdateDirectory()
