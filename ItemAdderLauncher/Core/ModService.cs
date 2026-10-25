@@ -63,6 +63,16 @@ public static class ModService
         return null;
     }
 
+    /// <summary>
+    /// BepInEx est utilisable quand son cœur est présent : c'est le fichier que
+    /// Doorstop charge au démarrage du jeu.
+    /// </summary>
+    public static bool IsBepInExInstalled(string? gamePath)
+    {
+        return !string.IsNullOrWhiteSpace(gamePath)
+            && File.Exists(Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"));
+    }
+
     public static async Task EnsureBepInExAsync(
         string gamePath,
         IProgress<string>? progress = null,

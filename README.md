@@ -17,7 +17,7 @@ Le projet contient deux programmes indépendants, qui peuvent être utilisés s�
 | Composant | Rôle | Version |
 | :--- | :--- | :---: |
 | `ItemAdder.dll` | Le mod, chargé par BepInEx dans le jeu. Il ajoute les produits, le rayon tabac, le sous-sol, la police, le réassort intelligent et le bouton du menu Échap. | 1.5.3 |
-| `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.1 |
+| `ItemAdderLauncher.exe` | L'application Windows avec menu latéral qui s'installe sur le PC (icône sur le Bureau), détecte le jeu, installe BepInEx et le mod, choisit les modules actifs, lit les actualités GitHub, lance le jeu et gère les mises à jour. | 1.5.2 |
 
 Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInEx + Harmony) et ajoute ses données aux tableaux du jeu en mémoire. Aucun asset externe n'est nécessaire, les modèles 3D des nouveaux produits sont générés par code.
 

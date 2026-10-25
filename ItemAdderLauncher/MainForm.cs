@@ -1723,8 +1723,14 @@ public sealed class MainForm : Form
         _installButton.Click += InstallButton_Click;
         _checkButton.Click += CheckButton_Click;
         _localDllButton.Click += LocalDllButton_Click;
-        _launchButton.Click += (_, _) => LaunchGame(withoutMods: false);
-        _vanillaButton.Click += (_, _) => LaunchGame(withoutMods: true);
+        _launchButton.Click += async (_, _) =>
+            await RunOperationAsync(
+                "Préparation du lancement...",
+                () => LaunchGameAsync(withoutMods: false));
+        _vanillaButton.Click += async (_, _) =>
+            await RunOperationAsync(
+                "Préparation du lancement...",
+                () => LaunchGameAsync(withoutMods: true));
         _openFolderButton.Click += OpenFolderButton_Click;
         _clearLogButton.Click += (_, _) => _logBox.Clear();
         _installSelfButton.Click += InstallSelfButton_Click;
@@ -1855,8 +1861,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        bool bepInExInstalled = File.Exists(
-            Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"));
+        bool bepInExInstalled = ModService.IsBepInExInstalled(gamePath);
         Version? latest = _latestRelease is null
             ? null
             : VersionHelper.Parse(_latestRelease.TagName);
@@ -2004,31 +2009,154 @@ public sealed class MainForm : Form
         }
     }
 
-    private void LaunchGame(bool withoutMods)
+    /// <summary>
+    /// Lance le jeu sans jamais le faire avant que BepInEx et le mod soient en
+    /// place. Sur une première installation, BepInEx se téléchargeait en tâche de
+    /// fond : un clic sur « Lancer le jeu » pendant ce temps démarrait le jeu en
+    /// vanilla (pas de trappe, pas de rayon Tabac), et rien ne le signalait.
+    /// </summary>
+    private async Task LaunchGameAsync(bool withoutMods)
     {
-        try
-        {
-            string gamePath = RequireGamePath();
+        string gamePath = RequireGamePath();
 
-            if (GameLocator.IsGameRunning())
+        if (GameLocator.IsGameRunning())
+        {
+            Log("Supermarket Together est déjà lancé : ferme-le, puis relance-le " +
+                "depuis le launcher pour être sûr qu'il démarre avec le mod.");
+            return;
+        }
+
+        if (!withoutMods)
+        {
+            var progress = new Progress<string>(Log);
+
+            if (!ModService.IsBepInExInstalled(gamePath))
             {
-                Log("Supermarket Together est déjà lancé.");
+                Log($"BepInEx manquant : installation avant le lancement " +
+                    $"({ModService.BepInExVersion})...");
+            }
+
+            await ModService.EnsureBepInExAsync(gamePath, progress, _lifetime.Token);
+            Log("BepInEx prêt.");
+
+            if (ModService.GetInstalledMod(gamePath) is null)
+            {
+                if (_latestRelease is null)
+                {
+                    throw new InvalidOperationException(
+                        "Le mod ItemAdder n'est pas installé et aucune release n'a pu être " +
+                        "récupérée : le jeu démarrerait sans le mod. Vérifie ta connexion, " +
+                        "puis clique à nouveau sur « Lancer le jeu ».");
+                }
+
+                Log($"Mod manquant : installation de la release {_latestRelease.TagName} " +
+                    "avant le lancement...");
+                InstalledMod installed = await ModService.InstallFromReleaseAsync(
+                    gamePath,
+                    _latestRelease,
+                    progress,
+                    _lifetime.Token);
+                Log($"Mod installé : {installed.FileName} ({installed.Version}).");
+            }
+
+            ApplyModuleSettings(gamePath);
+        }
+
+        DateTime launchedAt = DateTime.Now.AddSeconds(-1);
+        GameLocator.LaunchGame(gamePath, withoutMods);
+        Log(withoutMods
+            ? "Lancement de Supermarket Together en vanilla (BepInEx désactivé)..."
+            : "Lancement de Supermarket Together avec ItemAdder...");
+        SetState("Jeu lancé", Theme.Green);
+
+        if (!withoutMods)
+        {
+            _ = VerifyInjectionAsync(gamePath, launchedAt);
+        }
+    }
+
+    /// <summary>
+    /// Après le lancement, vérifie que BepInEx a réellement chargé le mod et le dit
+    /// dans le journal. Sans ce contrôle, un jeu démarré sans injection (Steam
+    /// pendant l'installation, BepInEx incomplet...) ne se voit qu'en jeu, par une
+    /// étagère vide.
+    /// </summary>
+    private async Task VerifyInjectionAsync(string gamePath, DateTime launchedAt)
+    {
+        string logPath = Path.Combine(gamePath, "BepInEx", "LogOutput.log");
+
+        for (int attempt = 0; attempt < 40; attempt++)
+        {
+            try
+            {
+                await Task.Delay(1500, _lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
                 return;
             }
 
-            if (!withoutMods)
+            if (IsDisposed || _lifetime.IsCancellationRequested)
             {
-                ApplyModuleSettings(gamePath);
+                return;
             }
 
-            GameLocator.LaunchGame(gamePath, withoutMods);
-            Log(withoutMods
-                ? "Lancement de Supermarket Together en vanilla (BepInEx désactivé)..."
-                : "Lancement de Supermarket Together...");
+            string? text = TryReadLauncherLog(logPath);
+            if (text is null)
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTime(logPath) < launchedAt)
+            {
+                continue;
+            }
+
+            if (text.Contains("Loading [ItemAdder", StringComparison.Ordinal))
+            {
+                Log("Mod chargé : ItemAdder est actif dans le jeu.");
+                return;
+            }
+
+            if (text.Contains("Chainloader startup complete", StringComparison.Ordinal))
+            {
+                Log("Attention : BepInEx a démarré mais ItemAdder n'a pas été chargé. " +
+                    "Le DLL est peut-être absent de BepInEx\\plugins.");
+                SetState("Mod absent", Theme.Red);
+                return;
+            }
         }
-        catch (Exception ex)
+
+        Log("Attention : le jeu tourne sans le mod (BepInEx n'a pas démarré). " +
+            "Ferme le jeu, clique sur « Vérifier les mises à jour » pour réinstaller " +
+            "BepInEx, puis relance depuis le launcher.");
+        SetState("Sans mod", Theme.Red);
+    }
+
+    private static string? TryReadLauncherLog(string path)
+    {
+        try
         {
-            ShowError(ex.Message);
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
@@ -2230,8 +2358,7 @@ public sealed class MainForm : Form
             ? "Aucun DLL dans BepInEx\\plugins"
             : $"({_installedMod.FileName})";
 
-        bool bepInExInstalled = File.Exists(
-            Path.Combine(gamePath, "BepInEx", "core", "BepInEx.dll"));
+        bool bepInExInstalled = ModService.IsBepInExInstalled(gamePath);
         _bepInExValue.Text = bepInExInstalled
             ? $"● Installé ({ModService.BepInExVersion})"
             : "● Absent";

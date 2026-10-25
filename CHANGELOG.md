@@ -10,6 +10,9 @@ Le mod et le launcher ont chacun leur numéro de version : le tag d'une release 
 ## [Non publié]
 
 ### Launcher
+- **Version 1.5.2** — asset de release `ItemAdderLauncher-v1.5.2.exe`, exécutable single-file autonome (25 octobre 2026).
+- **Premier lancement sans mod corrigé** : le launcher ne lance plus le jeu avant que BepInEx et le mod soient réellement en place. Sur une installation neuve, BepInEx se téléchargeait en tâche de fond et un clic sur **Lancer le jeu** pendant ce temps démarrait le jeu en vanilla (aucune trappe, aucun rayon Tabac), sans le moindre message. Le lancement vérifie désormais BepInEx, l'installe s'il manque, installe le mod depuis la dernière release s'il est absent, et échoue avec un message clair plutôt que de démarrer sans le mod.
+- **Contrôle après lancement** : le journal dit maintenant si le mod est réellement chargé (`Mod chargé : ItemAdder est actif dans le jeu.`), si BepInEx a démarré sans trouver le DLL, ou si le jeu tourne sans BepInEx. Un badge rouge remplace l'état habituel dans les deux derniers cas, avec la marche à suivre.
 - **Version 1.5.1** — asset de release `ItemAdderLauncher-v1.5.1.exe`, exécutable single-file autonome (25 octobre 2026).
 - **Première installation automatique** : au lancement, le launcher installe BepInEx 5.4.23.5 s'il manque, puis le mod depuis la dernière release GitHub s'il est absent ou plus ancien — sans question, sans bouton à cliquer. Si le jeu tourne, l'installation est reportée et signalée dans le journal (les fichiers sont verrouillés) ; il suffit de fermer le jeu et de relancer le launcher.
 - **Launcher installé dès le premier lancement** : plus de boîte de dialogue « installer sur ce PC ? ». L'exécutable se copie dans `%LOCALAPPDATA%\Programs\ItemAdder` et crée ses raccourcis Bureau / menu Démarrer tout seul ; le bouton du menu reste là pour désinstaller.
