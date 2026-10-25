@@ -12,6 +12,8 @@ namespace ItemAdder.Underground
         public bool[] Watered;
         public bool[] Covered;
         public uint PoliceNetId;
+        public int ClassicStock;
+        public int PremiumStock;
     }
 
     public struct UndergroundActionMessage : NetworkMessage
@@ -46,6 +48,7 @@ namespace ItemAdder.Underground
         internal const byte ActionHarvest = 2;
         internal const byte ActionToggleCover = 3;
         internal const byte ActionToggleDoor = 4;
+        internal const byte ActionSell = 5;
 
         private static bool _serializersReady;
 
@@ -146,6 +149,8 @@ namespace ItemAdder.Underground
             writer.WriteArray(value.PlantedAt ?? Array.Empty<float>());
             writer.WriteArray(value.Watered ?? Array.Empty<bool>());
             writer.WriteArray(value.Covered ?? Array.Empty<bool>());
+            writer.WriteInt(value.ClassicStock);
+            writer.WriteInt(value.PremiumStock);
         }
 
         private static UndergroundStateMessage ReadState(NetworkReader reader)
@@ -157,7 +162,9 @@ namespace ItemAdder.Underground
                 States = reader.ReadArray<byte>(),
                 PlantedAt = reader.ReadArray<float>(),
                 Watered = reader.ReadArray<bool>(),
-                Covered = reader.ReadArray<bool>()
+                Covered = reader.ReadArray<bool>(),
+                ClassicStock = reader.ReadInt(),
+                PremiumStock = reader.ReadInt()
             };
         }
 

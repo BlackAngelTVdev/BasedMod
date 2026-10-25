@@ -158,29 +158,16 @@ namespace ItemAdder.Underground
             return true;
         }
 
+        /// <summary>
+        /// Les herbes ne sont plus vendues sur un rayon du magasin : elles
+        /// s'écoulent au contact, dans le sous-sol. Elles ne doivent donc
+        /// jamais entrer dans la liste de courses des clients, sinon ceux-ci
+        /// les chercheraient dans les rayons et se plaindraient qu'elles
+        /// manquent. La méthode reste appelée par les patches du catalogue
+        /// mais ne fait plus rien.
+        /// </summary>
         internal static void RefreshAvailability()
         {
-            if (!Plugin.EnableUnderground.Value)
-                return;
-
-            ProductListing listing = ProductListing.Instance;
-            if (listing == null || listing.availableProducts == null)
-                return;
-
-            UndergroundManager manager = UndergroundManager.Instance;
-            if (manager == null || !IsReady)
-                return;
-
-            // En multi, seul l'hôte génère les listes de courses des clients.
-            // Les autres pairs gardent la liste locale telle que le jeu la construit.
-            if (manager.IsServer == false)
-                return;
-
-            // Chaque variété n'est proposée aux clients que si elle est
-            // réellement en rayon : une herbe épuisée sort de la liste, sinon
-            // les clients partent la chercher et se plaignent qu'elle manque.
-            SetAvailable(listing, ClassicProductId, manager.HasClassicStock);
-            SetAvailable(listing, PremiumProductId, manager.HasPremiumStock);
         }
 
         /// <summary>
@@ -283,7 +270,7 @@ namespace ItemAdder.Underground
                 productSprite = sprite,
                 productContainerClass = baseData.productContainerClass,
                 boxClass = baseData.boxClass,
-                maxItemsPerBox = 10,
+                maxItemsPerBox = BoxSizes.MinimumItemsPerBox,
                 basePricePerUnit = price,
                 productBrand = Brand,
                 productTier = 0,

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HarmonyLib;
+using ItemAdder.Products;
 using ItemAdder.Tobacco;
 
 namespace ItemAdder.Patches
@@ -18,6 +19,9 @@ namespace ItemAdder.Patches
             bool changed;
             if (TobaccoManager.TrySetup(__instance, out changed) && changed)
                 TobaccoManager.Refresh(__instance);
+
+            // Après l'ajout du catalogue tabac : tous les colis font au moins 50 pièces.
+            BoxSizes.EnsureMinimum(__instance);
         }
     }
 
@@ -30,6 +34,8 @@ namespace ItemAdder.Patches
             bool changed;
             if (TobaccoManager.TrySetup(__instance, out changed) && changed)
                 TobaccoManager.Refresh(__instance);
+
+            BoxSizes.EnsureMinimum(__instance);
         }
     }
 

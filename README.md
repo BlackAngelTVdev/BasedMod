@@ -40,11 +40,11 @@ Le jeu n'est ni modifié ni recompilé : le mod s'accroche au chargement (BepInE
 - ✅ **Modèles 3D générés** : chaque produit a son maillage (coques biseautées, pièces tournées : paquet, blague, bouteille, vape, boîte métallique, cigare, briquet, cendrier, grinder, bourgeon), construit sommet par sommet au chargement — aucune primitive Unity, aucun fichier à installer.
 - ✅ **Palier d'arbre de compétences** : « Tabac I » apparaît juste après « Fruits de mer I », coûte 1 point de franchise et exige ce palier.
 - ✅ **Prix libres** : les produits tabac passent par la machine à prix comme les autres ; leur prix de base est prérempli.
-- ✅ **Sous-sol clandestin** : une salle sous le magasin avec 6 parcelles à cultiver, une trappe discrète dans la surface de vente côté rue, un rayon de vente à l'étage, un policier qui patrouille et des amendes — jouable en solo comme en multijoueur.
+- ✅ **Sous-sol clandestin** : une salle sous le magasin avec 6 parcelles à cultiver, une trappe discrète à l'entrée du magasin, sur la gauche, un contact du marché noir qui rachète la récolte sur place, un policier qui patrouille et des amendes — jouable en solo comme en multijoueur.
 - ✅ **Employés plus logiques** : un produit resté en réserve sans être posé sur une étagère est rangé par un employé de réassort sur l'étagère compatible la plus proche.
 - ✅ **Bouton « Sauvegarder et menu »** dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ».
 - ✅ **Multiplicateur de fonds** configurable, sans toucher au reste de l'économie.
-- ✅ **Raccourcis de confort** : F5 ajoute 50 points de franchise, F6 fixe les fonds à 2 milliards (hôte uniquement).
+- ✅ **Raccourcis de confort** : F5 ajoute 50 points de franchise, F6 fixe les fonds à 2 milliards (hôte uniquement), F9 / F10 placent la trappe du sous-sol au centimètre.
 - ✅ **Configuration sans recompilation** : chaque module peut être désactivé dans le fichier `.cfg` de BepInEx.
 - ✅ **Chargement optimisé** : prefabs, icônes et matériaux du rayon tabac sont générés une seule fois puis réutilisés entre les parties ; les temps sont tracés dans le log (`[Perf]`).
 
@@ -86,9 +86,9 @@ Conséquences importantes :
 Les maillages sont construits dans `Products/ProductMeshes.cs` à partir de trois briques — `Slab` (coque biseautée), `Lathe` (pièce tournée) et `Blob` (bourgeon) — puis mis en cache par clé : un paquet, une bouteille ou un cigare n'est généré qu'une fois par session.
 
 ### Sous-sol : construction, autorité réseau et sauvegarde
-Le sous-sol n'est pas une scène : il est assemblé **à partir des prefabs du magasin** (murs, sol, porte, étagère, caisse non incluse) sous le bâtiment, dans une salle de 18 × 16 avec 6 parcelles. Le mod repère un emplacement libre et une trappe dans la surface de vente, côté rue, à l'intérieur des limites du magasin.
+Le sous-sol n'est pas une scène : il est assemblé **à partir des prefabs du magasin** (murs, sol, porte, caisse non incluse) sous le bâtiment, dans une salle de 18 × 16 avec 6 parcelles, dont le sol est **7 m sous le plancher** du magasin (plafond juste sous la dalle, soit 6,1 m de hauteur). Le mod repère un emplacement libre et une trappe dans la surface de vente, près de l'entrée et sur la gauche du magasin, à l'intérieur des limites du magasin.
 
-L'hôte est autoritaire : cultures, trappe, stock du rayon et amende sont décidés côté serveur, puis un état compact est envoyé aux clients (parcelles, bâche, ouverture de la trappe, stock). Chaque client construit le même décor localement pour garder la scène cohérente.
+L'hôte est autoritaire : cultures, trappe, réserve et amende sont décidés côté serveur, puis un état compact est envoyé aux clients (parcelles, bâche, ouverture de la trappe, stock en réserve). Chaque client construit le même décor localement pour garder la scène cohérente.
 
 L'état du sous-sol est enregistré séparément de la sauvegarde du jeu, dans :
 
@@ -101,7 +101,7 @@ Ce fichier contient la version du format, l'état de la trappe et, pour chaque p
 ### Employés : réassort
 Le jeu vanilla ne demande aux employés de ranger que les produits **déjà affectés à une rangée d'étagère**. Un produit acheté puis stocké en réserve sans avoir été posé n'intéresse donc personne et les employés restent inactifs.
 
-Le patch intervient seulement quand l'employé n'a **aucune tâche vanilla** : il cherche le premier produit en réserve qui n'apparaît sur aucune étagère, réserve une rangée libre de l'étagère du bon type la plus proche et l'envoie la remplir. Le même mécanisme sert au rayon tabac et aux herbes du sous-sol.
+Le patch intervient seulement quand l'employé n'a **aucune tâche vanilla** : il cherche le premier produit en réserve qui n'apparaît sur aucune étagère, réserve une rangée libre de l'étagère du bon type la plus proche et l'envoie la remplir. Le même mécanisme sert au rayon tabac.
 
 ### Interface : menu Échap
 Le bouton « Sauvegarder et menu » est un clone du bouton « Oui » de la confirmation « Retour au menu principal » : son automate PlayMaker exécute déjà tout le flux du jeu (sauvegarde, fermeture du lobby, arrêt de l'hôte, retour au menu). Le mod le renomme et le replace entre « Sauvegarder et quitter » et « Retour ».
@@ -279,8 +279,19 @@ ChanceRaidParInspection = 0.35
 | `AmendeRaid` | `Souterrain` | `5000` | Montant retiré des fonds lors d'un raid réussi |
 | `DureePousseHeures` | `Souterrain` | `8` | Heures de jeu nécessaires pour qu'une parcelle arrosée arrive à maturité |
 | `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection se transforme en descente |
+| `PauseAvantLog` | `Placement` | `true` | **Temporaire (mise au point)** : au F10 du mode placement, fige le jeu pour vérifier l'emplacement ; un second F10 écrit les coordonnées dans le log, F9 annule et relance le temps |
 
 > ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` ou `ActiverSousSol` après avoir utilisé ces contenus dans une sauvegarde peut la rendre illisible : garde les options actives pour les parties concernées.
+
+### Colis de 50 pièces
+Tous les produits commandés arrivent en **colis d'au moins 50 unités**, quel que soit le rayon (produits vanilla, Tabac et herbes du sous-sol).
+
+- Seule la **contenance** change : les prix unitaires, les paliers et les emplacements en rayon restent ceux du jeu.
+- Le prix d'un colis vaut `prix unitaire × contenance`, exactement comme en vanilla : une commande coûte donc plus cher, mais chaque pièce garde son prix.
+- Un colis existant d'une ancienne sauvegarde reste valide ; il peut simplement être complété jusqu'à 50 pièces.
+- Les rayons, réserves et employés fonctionnent normalement : le jeu transfère les pièces par lots de la taille des rangées.
+
+Aucune option de configuration : la règle s'applique à toutes les parties.
 
 ### Rayon tabac
 1. Débloque d'abord **Fruits de mer I** dans l'arbre de compétences.
@@ -299,13 +310,30 @@ Le catalogue couvre :
 ### Sous-sol clandestin
 
 #### Accès
-Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît dans la surface de vente, côté rue et sur la droite (le mod repère la rue grâce aux points d'apparition des clients), toujours à l'intérieur des limites du magasin et sur un sol libre.
+Le sous-sol est construit automatiquement sous le magasin dès que le layout **Classic** est chargé. Une trappe apparaît dans la surface de vente, **près de l'entrée et sur la gauche** du magasin (le mod repère la rue grâce aux points d'apparition des clients), toujours à l'intérieur des limites du magasin, sur un sol libre **et à côté d'une zone marchable** : si aucun point du NavMesh du magasin n'existe à moins de 1,5 m, l'emplacement est rejeté pour que la trappe reste toujours atteignable à pied.
 
-- **E** sur la trappe : ouvrir / fermer.
-- Marcher sur la trappe **ouverte** : descendre.
+La descente ne dépend d'aucun déclencheur physique (c'était la cause des trappes impossibles à emprunter) :
+
+- **E** sur la trappe fermée : l'ouvrir (un message rappelle qu'il faut appuyer une seconde fois pour descendre).
+- **E** sur la trappe ouverte : descendre — le joueur est déposé **sur le palier du bas**, dans la salle, face aux marches. Il n'atterrit plus au milieu de la rampe, où il pouvait glisser et se coincer dans la pente.
+- **E** sur le palier du bas, sous l'inscription `[E] Remonter` : remonter sur le plancher du magasin.
+- **F** sur la trappe ouverte : la refermer.
 - La trappe est aussi un lien de navigation : la police peut l'emprunter quand elle est ouverte.
 
-Si la trappe gêne un passage ou se retrouve contre un meuble, déplace le meuble : le mod cherche un autre emplacement libre au chargement suivant.
+Si la trappe gêne un passage ou se retrouve contre un meuble, déplace le meuble : le mod cherche un autre emplacement libre au chargement suivant. Pour choisir l'emplacement à la main, voir **F9 / F10** plus bas.
+
+#### Décor et ambiance
+La salle de 18 × 16 m est meublée comme un vrai local clandestin, sans aucune ressource externe : les textures (béton, briques, bois, métal, carton) sont générées au chargement.
+
+- **Murs** en béton coulé avec bandeau de briques en partie basse, plinthes métalliques et piliers d'angle.
+- **Éclairage** : cinq réglettes néon blanches au plafond et trois **lampes de croissance mauves** suspendues au-dessus des parcelles.
+- **Rangement** : rack métallique à deux niveaux au fond, cartons, bâche ; établi avec balance, pots et bocaux contre le mur est.
+- **Culture** : cuve d'eau, tuyau d'arrosage, arrosoir et sacs de terre ; marquage jaune au sol autour de la zone de culture.
+- **Séchage** : séchoir en bois à trois barres avec têtes suspendues, le long du mur d'entrée.
+- **Local technique** : gaine de ventilation avec grilles, extracteur mural, tableau électrique et câbles.
+- **Détails** : garde-corps le long de l'escalier, tapis caoutchouc, grille d'évacuation, flaque, bidons, seau et balai.
+
+Tout est décoratif : les interactions, les six parcelles, la trappe, le contact et la police ne changent pas. Les gros éléments (rack, établi, cuve, séchoir) ont une collision ; les petits détails n'en ont pas pour ne jamais bloquer le joueur ou les PNJ.
 
 #### Culture
 Six parcelles, chacune avec son pot et son étiquette d'état.
@@ -318,29 +346,33 @@ Six parcelles, chacune avec son pot et son étiquette d'état.
 - **E** sur une parcelle vide : planter (la graine est débitée des fonds).
 - **E** sur une parcelle plantée non arrosée : arroser. Sans arrosage, la pousse plafonne à **50 %**.
 - La pousse suit les heures de jeu : `DureePousseHeures` (8 h par défaut) après la plantation si la parcelle est arrosée.
-- **E** sur une parcelle prête : récolter. La récolte part **directement dans le rayon à herbes de l'étage** ; si le rayon est plein, le message te demande de vendre avant de récolter.
+- **E** sur une parcelle prête : récolter. La récolte part **dans la réserve du sous-sol** (24 unités maximum par variété) ; si la réserve est pleine, le message te demande de vendre avant de récolter.
 - **F** sur une parcelle plantée : bâcher / débâcher. Une parcelle bâchée cache sa plante (utile pendant une inspection).
 
-#### Vente à l'étage
-Le rayon à herbes est posé **à l'étage**, à côté d'un rayon déjà installé par le joueur (jamais dans la réserve). Aucune caisse n'est construite au sous-sol : les clients paient aux caisses normales du magasin.
+#### Vente au contact
+Plus de rayon improvisé dans le magasin : les herbes ne sont **jamais** mises en rayon, donc plus de clients qui se servent tout seuls sur une étagère comme s'il s'agissait de lessive. La vente se fait au fond du sous-sol, sur une table discrète avec une mallette, marquée `Contact — [E] Vendre la récolte` :
 
-Le rayon n'apparaît dans la demande des clients **que s'il contient réellement du stock** ; si une variété s'épuise en cours de journée, elle est retirée des listes de courses en cours, donc personne ne repart chercher une herbe absente. Le jeu sauvegardant les meubles, une copie du rayon restaurée au chargement est supprimée et son stock transféré sur le rayon recréé au bon endroit.
+- **E** devant le contact : écoule **toute la réserve** d'un coup et crédite les fonds immédiatement ;
+- prix de vente fixes : **85 $** l'herbe classique, **190 $** l'herbe premium ;
+- la réserve est sauvegardée avec la partie (fichier du sous-sol), et l'hôte est seul à décider de la vente en multijoueur.
+
+Les anciennes étagères à herbes laissées par une sauvegarde précédente sont supprimées au chargement.
 
 #### Police et amendes
 Un agent patrouille dans le magasin. Il effectue des inspections :
 
 - la première a lieu **75 à 150 secondes** après le chargement, puis toutes les **110 à 220 secondes** ;
 - une inspection ne peut déboucher sur une descente que si le magasin est **ouvert** et qu'il est entre **8 h et 22 h** ;
-- il faut en plus que la **trappe soit ouverte** et qu'il reste soit une **plante non bâchée**, soit du **stock au rayon à herbes** ;
+- il faut en plus que la **trappe soit ouverte** et qu'il reste soit une **plante non bâchée**, soit de la **récolte en réserve** ;
 - la probabilité de descente est alors `ChanceRaidParInspection` (35 % par défaut).
 
 Déroulé d'un raid :
 
 1. message d'alerte, le policier se dirige vers la trappe ;
 2. **s'il la trouve fermée, il abandonne** — c'est le moment de refermer derrière toi ;
-3. il descend, fouille la salle et, s'il reste une plante visible ou du stock au rayon, applique l'amende (`AmendeRaid`, 5 000 $ par défaut), **vide toutes les parcelles et le stock du rayon**, puis remonte.
+3. il descend, fouille la salle et, s'il reste une plante visible ou de la récolte en réserve, applique l'amende (`AmendeRaid`, 5 000 $ par défaut), **vide toutes les parcelles et la réserve**, puis remonte.
 
-Une fois en bas, fermer la trappe ne cache plus rien : bâche les plants et vide le rayon avant sa descente.
+Une fois en bas, fermer la trappe ne cache plus rien : bâche les plants et vends la réserve au contact avant sa descente.
 
 ### Menu Échap
 Un bouton **« Sauvegarder et menu »** est ajouté dans le menu Échap, entre « Sauvegarder et quitter » et « Retour ». Il sauvegarde la partie puis revient au menu principal, sans quitter le jeu.
@@ -353,8 +385,23 @@ En solo ou en tant qu'hôte :
 
 En multijoueur client, les raccourcis sont ignorés : les points et les fonds doivent être modifiés par l'hôte.
 
+### Placer la trappe (F9 / F10)
+Pour choisir l'emplacement exact de la trappe au lieu de le deviner :
+
+1. lance une partie et attends `[Souterrain] Sous-sol prêt.` ;
+2. **F9** active le mode placement : un fantôme translucide du sous-sol (cadre de trappe, salle 18 × 16 m, rampe, 6 parcelles, rayon) suit le point que tu vises. Il est dessiné par une caméra de superposition, donc **visible à travers les murs** ; la trappe réelle est masquée pendant le réglage ;
+3. vise le sol à l'endroit voulu : l'encadré affiche X / Y / Z et prévient si la salle dépasse des limites du magasin ;
+4. **F10** met le jeu en pause pour vérifier l'emplacement : le fantôme et l'encadré des coordonnées restent affichés, le temps est figé (les clients et la police ne bougent plus) ;
+5. un **second F10** relance le jeu et écrit la position dans `BepInEx\LogOutput.log` sous la forme
+   `[Placement] HatchOverride = new Vector3(5.42f, 0.03f, 27.51f);`, puis quitte le mode ;
+6. **F9** à nouveau annule, relance le jeu et réaffiche la trappe réelle.
+
+Le gel avant écriture est un réglage temporaire de mise au point, activé par défaut et désactivable dans le `.cfg` (`[Placement]` → `PauseAvantLog = false`) : F10 écrit alors les coordonnées en une seule fois comme avant.
+
+Pour rendre l'emplacement définitif, remplace la valeur de `HatchOverride` dans `ItemAdder/Underground/UndergroundManager.cs` par le `Vector3` relevé, puis recompile. `Vector3.zero` conserve le placement automatique.
+
 ### Multijoueur
-1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.2) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
+1. Installe **BepInEx 5.4.23.5 x64** et le **même** `ItemAdder.dll` (version 1.4.3) dans `BepInEx\plugins` sur le PC de **chaque** joueur.
 2. L'hôte lance une partie **Classic** et ouvre son lobby comme d'habitude. Le sous-sol apparaît quand le layout Classic est chargé, avant ou après l'arrivée des amis.
 3. Dans le log de l'hôte, vérifie `[Souterrain] Sous-sol prêt.` et `[Souterrain] Policier spawn`.
 4. Chez un client, le log doit afficher `[Souterrain] État du sous-sol reçu de l'hôte.` : trappe, parcelles, bâches et stock sont pilotés par l'hôte.
@@ -418,9 +465,11 @@ Le tag porte la version du mod, le nom du fichier exécutable porte la version d
 | Badge « Prêt » alors que tu viens de publier | `<Version>` du DLL non incrémentée | Incrémente la version, recompile, republie l'asset |
 | Pas de sous-sol | `ActiverSousSol = false` ou layout non-Classic | Coche le module dans le launcher, charge une partie Classic |
 | La trappe gêne le passage | Meuble posé dessus après coup | Déplace le meuble ; le mod cherche un autre emplacement au chargement suivant |
-| « Aucune étagère constructible trouvée » | Aucune étagère compatible disponible pour recevoir le rayon à herbes | Pose ou débloque une étagère du magasin, puis recharge la partie |
+| Le contact n'apparaît pas | Sous-sol d'une ancienne version encore chargé | Recharge la partie : le sous-sol est reconstruit au chargement |
 | Amende alors que la trappe était fermée | La police était déjà descendue | Referme la trappe **avant** son arrivée, bâche les plants, vide le rayon |
 | Le launcher se ferme pendant la mise à jour | Dossier non accessible en écriture | Déplace l'exécutable dans un dossier utilisateur |
+| Le raccourci du Bureau pointe vers un ancien fichier | Le launcher a été installé depuis une autre copie | Lance la copie voulue et clique « Installer sur le PC » : les raccourcis sont recréés vers le dossier d'installation |
+| Où est passé le launcher installé ? | Installation par utilisateur, sans `Program Files` | `%LOCALAPPDATA%\Programs\ItemAdder\ItemAdderLauncher.exe`, aussi accessible par le raccourci du menu Démarrer |
 | `Steamworks is not initialized` dans le log | Le jeu est lancé sans Steam (ou Steam hors ligne) | Lance le jeu depuis Steam ; le mod n'est pas concerné |
 | `BoxCollider does not support negative scale` | Avertissement interne du jeu sur ses portes | Sans effet sur le mod |
 

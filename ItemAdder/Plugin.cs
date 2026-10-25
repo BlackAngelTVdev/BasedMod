@@ -15,7 +15,7 @@ namespace ItemAdder
     {
         public const string PluginGuid = "com.username.supermarkettogethermod";
         public const string PluginName = "ItemAdder";
-        public const string PluginVersion = "1.4.2";
+        public const string PluginVersion = "1.5.2";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
@@ -25,6 +25,9 @@ namespace ItemAdder
         internal static ConfigEntry<float> UndergroundRaidFine;
         internal static ConfigEntry<float> UndergroundGrowHours;
         internal static ConfigEntry<float> UndergroundRaidChance;
+
+        // TEMPORAIRE (mise au point du placement) : à retirer avec le mode pause.
+        internal static ConfigEntry<bool> PlacementPauseBeforeLog;
 
         private Harmony _harmony;
 
@@ -74,6 +77,14 @@ namespace ItemAdder
                 0.35f,
                 "Probabilité qu'une inspection de police déclenche un raid si la trappe est ouverte et qu'un plant est visible.");
 
+            PlacementPauseBeforeLog = Config.Bind(
+                "Placement",
+                "PauseAvantLog",
+                true,
+                "Met le jeu en pause quand F10 relève la trappe : le fantôme et les coordonnées " +
+                "restent affichés pour vérifier l'emplacement, un second F10 écrit dans le log. " +
+                "Réglage temporaire de mise au point.");
+
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
 
@@ -82,6 +93,15 @@ namespace ItemAdder
                 GameObject underground = new GameObject("ItemAdder_UndergroundManager");
                 Object.DontDestroyOnLoad(underground);
                 underground.AddComponent<UndergroundManager>();
+                underground.AddComponent<UndergroundPlacementMode>();
+            }
+            else
+            {
+                // Le mode placement reste disponible même sous-sol désactivé :
+                // il sert à relever les coordonnées de la trappe.
+                GameObject placement = new GameObject("ItemAdder_PlacementMode");
+                Object.DontDestroyOnLoad(placement);
+                placement.AddComponent<UndergroundPlacementMode>();
             }
 
             GameObject escapeMenu = new GameObject("ItemAdder_EscapeMenu");

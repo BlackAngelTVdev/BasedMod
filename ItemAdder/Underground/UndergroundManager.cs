@@ -24,7 +24,16 @@ namespace ItemAdder.Underground
         private BasementLayout _layout;
         private CannabisPlot[] _plots;
         private BasementDoor _door;
+
+        // Récolte en réserve : elle n'est plus vendue sur un rayon du magasin
+        // mais au contact, dans le sous-sol (index 0 = classique, 1 = premium).
+        private readonly int[] _stock = new int[2];
+
+        // Ancien rayon d'herbes : plus utilisé, conservé pour que les étagères
+        // laissées par une ancienne sauvegarde puissent être retrouvées puis
+        // supprimées au chargement.
         private Data_Container _shelf;
+        private const int StockCapacity = 24;
         private GameObject _police;
         private NavMeshAgent _policeAgent;
         private uint _policeNetId;
@@ -42,11 +51,9 @@ namespace ItemAdder.Underground
         private float _lastPoliceRecovery;
         private float _nextSave;
         private float _nextHello;
-        private float _nextProductRefresh;
         private float _nextBuildAttempt;
         private float _nextSpawnRetry;
         private float _nextPrefabWarning;
-        private float _nextDemandPurge;
         private float _nextFallCheck;
         private float _nextLeftoverCheck;
         private float _nextClientResync;
@@ -56,8 +63,49 @@ namespace ItemAdder.Underground
         private float _lastNotify;
         private int _patrolIndex;
         private Vector3[] _patrolPoints;
+        private Vector2 _shopX;
+        private Vector2 _shopZ;
 
         internal bool IsServer => NetworkServer.active;
+
+        /// <summary>
+        /// Position définitive de la trappe, relevée avec le mode placement
+        /// (F9 puis F10 dans le jeu). Vector3.zero = placement automatique
+        /// via FindHatchPosition.
+        /// </summary>
+        internal static readonly Vector3 HatchOverride = Vector3.zero;
+
+        internal BasementLayout Layout => _layout;
+
+        internal bool HasLayout => _built && _layout != null;
+
+        /// <summary>Limites de construction du magasin en X (x = min, y = max).</summary>
+        internal Vector2 ShopX => _shopX;
+
+        /// <summary>Limites de construction du magasin en Z (x = min, y = max).</summary>
+        internal Vector2 ShopZ => _shopZ;
+
+        internal bool IsLocalPlayerInBasement
+        {
+            get
+            {
+                FirstPersonController player = FirstPersonController.Instance;
+                return player != null && IsInBasement(player.transform.position);
+            }
+        }
+
+        /// <summary>
+        /// Masque ou réaffiche la trappe réelle (mode placement).
+        /// </summary>
+        internal void SetDoorVisible(bool visible)
+        {
+            if (_door == null)
+                return;
+
+            GameObject doorObject = _door.gameObject;
+            if (doorObject != null && doorObject.activeSelf != visible)
+                doorObject.SetActive(visible);
+        }
 
         internal static bool IsInBasement(Vector3 position)
         {
@@ -88,9 +136,13 @@ namespace ItemAdder.Underground
                    hit.collider == manager._layout.RampCollider;
         }
 
-        internal bool HasClassicStock => IsServer && GetShelfQuantity(0) > 0;
+        internal bool HasClassicStock => _stock[0] > 0;
 
-        internal bool HasPremiumStock => IsServer && GetShelfQuantity(1) > 0;
+        internal bool HasPremiumStock => _stock[1] > 0;
+
+        internal int ClassicStock => _stock[0];
+
+        internal int PremiumStock => _stock[1];
 
         private void Awake()
         {
@@ -185,7 +237,7 @@ namespace ItemAdder.Underground
                 // Les prefabs du jeu ne sont pas toujours prêts au premier tick :
                 // on retente tant que le rayon ou le policier manque.
                 _nextSpawnRetry = Time.time + 4f;
-                if (_shelf == null || _police == null)
+                if (_police == null)
                     SpawnNetworkObjects();
             }
 
@@ -199,11 +251,6 @@ namespace ItemAdder.Underground
             HandleLocalInput();
             TickFallRecovery();
             UpdatePlots();
-            // Le stock du rayon change quand les clients achètent : on remet à
-            // jour la liste des produits demandés pour qu'un rayon vide ne
-            // laisse pas les clients chercher une herbe introuvable.
-            RefreshProducts();
-            PurgeUnavailableDemand();
             TickLeftoverCleanup();
             TickPolice();
             TickSave();
@@ -241,14 +288,25 @@ namespace ItemAdder.Underground
             float maxX = builder.buildXLimits.y;
             float minZ = builder.buildZLimits.x;
             float maxZ = builder.buildZLimits.y;
+            _shopX = new Vector2(minX, maxX);
+            _shopZ = new Vector2(minZ, maxZ);
+            Plugin.Log.LogInfo(
+                $"[Souterrain] Limites du magasin : X {minX:0.0} → {maxX:0.0}, " +
+                $"Z {minZ:0.0} → {maxZ:0.0}.");
 
             // La trappe reste dans la surface de vente. Posée dehors, sur le
             // trottoir, elle perçait le décor et le joueur restait coincé dans
-            // la géométrie du sous-sol.
-            Vector3 hatch = FindHatchPosition(minX, maxX, minZ, maxZ);
+            // la géométrie du sous-sol. Une position relevée en mode placement
+            // (F9 / F10) prend le dessus.
+            bool overridden = HatchOverride != Vector3.zero;
+            Vector3 hatch = overridden
+                ? HatchOverride
+                : FindHatchPosition(minX, maxX, minZ, maxZ);
             Plugin.Log.LogInfo(
-                $"[Souterrain] Trappe placée côté rue, à droite de la surface " +
-                $"de vente ({hatch.x:0.0}, {hatch.z:0.0}).");
+                overridden
+                    ? $"[Souterrain] Trappe placée en dur à ({hatch.x:0.0}, {hatch.z:0.0})."
+                    : $"[Souterrain] Trappe placée à l'entrée, à gauche du magasin " +
+                      $"({hatch.x:0.0}, {hatch.z:0.0}).");
 
             string floorTag = "";
             int floorLayer = 0;
@@ -290,7 +348,7 @@ namespace ItemAdder.Underground
             _nextSave = Time.time + 12f;
             _nextClientResync = Time.time + 30f;
 
-            Notify("Le sous-sol clandestin est aménagé. Trappe côté rue, à droite du magasin.");
+            Notify("Le sous-sol clandestin est aménagé. Trappe à l'entrée, à gauche du magasin.");
             Plugin.Log.LogInfo("[Souterrain] Sous-sol prêt.");
 
             if (NetworkServer.active)
@@ -302,12 +360,13 @@ namespace ItemAdder.Underground
         }
 
         /// <summary>
-        /// Choisit un emplacement de trappe **à l'intérieur** du magasin, côté
-        /// rue et sur la droite de la surface de vente. La direction de la rue
-        /// vient des points d'apparition des clients (sur le trottoir). Une
-        /// grille de candidats est ensuite parcourue depuis ce point, et on
-        /// retient le premier sol praticable qui laisse la place au cadre de
-        /// 3,3 m de la trappe. En dernier recours, le centre du magasin.
+        /// Choisit un emplacement de trappe **à l'intérieur** du magasin, près
+        /// de l'entrée et sur la gauche de la surface de vente. La direction
+        /// de la rue vient des points d'apparition des clients (sur le
+        /// trottoir). Une grille de candidats est ensuite parcourue depuis ce
+        /// point, et on retient le premier sol praticable qui laisse la place
+        /// au cadre de 3,3 m de la trappe. En dernier recours, le centre du
+        /// magasin.
         /// </summary>
         private static Vector3 FindHatchPosition(float minX, float maxX, float minZ, float maxZ)
         {
@@ -330,9 +389,12 @@ namespace ItemAdder.Underground
             if (roadDirection != Vector3.zero)
             {
                 Vector3 right = new Vector3(roadDirection.z, 0f, -roadDirection.x);
+
+                // Contre l'entrée, sur la gauche : la trappe est juste à côté
+                // de la porte, donc facile à trouver et à refermer derrière soi.
                 anchor = center
                          + roadDirection * ((maxZ - minZ) * 0.30f)
-                         + right * ((maxX - minX) * 0.20f);
+                         - right * ((maxX - minX) * 0.26f);
 
                 anchor = new Vector3(
                     Mathf.Clamp(anchor.x, minX + margin, maxX - margin),
@@ -359,8 +421,15 @@ namespace ItemAdder.Underground
                 return leftDistance.CompareTo(rightDistance);
             });
 
-            // Premier passage : dégagement large (le cadre de la trappe fait
-            // 3,3 m de côté). Second passage : dégagement minimal.
+            // Premier passage : il faut un sol marchable (NavMesh du magasin)
+            // juste à côté, sinon la trappe est inatteignable.
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (TryFloorPoint(candidates[i], out Vector3 reachable, 1.8f, true))
+                    return reachable;
+            }
+
+            // Passages suivants : dégagement large puis minimal.
             float[] clearances = { 2.0f, 1.4f };
             for (int pass = 0; pass < clearances.Length; pass++)
             {
@@ -417,7 +486,8 @@ namespace ItemAdder.Underground
         }
 
         private static bool TryFloorPoint(
-            Vector3 candidate, out Vector3 floor, float clearance = 1.35f)
+            Vector3 candidate, out Vector3 floor, float clearance = 1.35f,
+            bool requireNavMesh = false)
         {
             floor = Vector3.zero;
 
@@ -449,6 +519,15 @@ namespace ItemAdder.Underground
                 return false;
             }
 
+            if (requireNavMesh &&
+                !NavMesh.SamplePosition(new Vector3(candidate.x, hit.point.y, candidate.z),
+                    out NavMeshHit _, 1.5f, NavMesh.AllAreas))
+            {
+                // Aucun sol marchable juste à côté : le joueur ne pourrait pas
+                // s'approcher de la trappe pour appuyer sur E.
+                return false;
+            }
+
             floor = new Vector3(candidate.x, 0f, candidate.z);
             return true;
         }
@@ -458,11 +537,14 @@ namespace ItemAdder.Underground
             if (!NetworkServer.active)
                 return;
 
-            CreateHerbShelf();
             SpawnPolice();
-            RefreshProducts();
         }
 
+        /// <summary>
+        /// ANCIEN rayon d'herbes, à l'étage : plus jamais appelé depuis que la
+        /// récolte se vend au contact. Conservé uniquement pour retrouver et
+        /// supprimer les étagères laissées par les anciennes sauvegardes.
+        /// </summary>
         private void CreateHerbShelf()
         {
             if (_shelf != null || _layout == null)
@@ -1031,10 +1113,53 @@ namespace ItemAdder.Underground
                 return;
 
             Vector3 playerPosition = player.transform.position;
-            if (Vector3.Distance(playerPosition, _layout.Hatch) < 2.8f && action)
+
+            // Vente de la récolte au contact, dans la salle.
+            if (action && _layout.ContactPosition != Vector3.zero &&
+                Vector3.Distance(playerPosition, _layout.ContactPosition) < 3.0f)
             {
-                RequestDoorToggle();
+                RequestSell();
                 return;
+            }
+
+            // Remontée : E sur le palier, au pied des marches.
+            if (action && playerPosition.y < -1.2f &&
+                Vector3.Distance(playerPosition, _layout.StairExit) < 3.5f)
+            {
+                AscendPlayer(player);
+                return;
+            }
+
+            bool nearHatch = Vector3.Distance(playerPosition, _layout.Hatch) < 3.2f;
+
+            if (nearHatch)
+            {
+                // Trappe ouverte : E descend, F referme. La descente ne dépend
+                // donc plus du déclencheur physique (joueur déjà dessus, trappe
+                // collée à un mur ou à l'entrée du magasin).
+                if (cover && _doorOpen)
+                {
+                    RequestDoorToggle();
+                    return;
+                }
+
+                if (action)
+                {
+                    if (_doorOpen)
+                    {
+                        DescendPlayer(player);
+                    }
+                    else
+                    {
+                        RequestDoorToggle();
+                        if (NetworkServer.active)
+                        {
+                            Notify("Trappe ouverte : appuie à nouveau sur E pour descendre.");
+                        }
+                    }
+
+                    return;
+                }
             }
 
             CannabisPlot plot = FindClosestPlot(player);
@@ -1045,6 +1170,56 @@ namespace ItemAdder.Underground
                 RequestPlotAction(plot);
             else if (cover)
                 RequestPlotAction(plot, true);
+        }
+
+        /// <summary>
+        /// Descente : dépose le joueur sur le palier du bas, dans la salle. On
+        /// ne le pose plus au milieu de la rampe, où il pouvait glisser, se
+        /// coincer dans la pente ou rester bloqué dans le décor.
+        /// </summary>
+        private void DescendPlayer(FirstPersonController player)
+        {
+            if (_layout == null || player == null)
+                return;
+
+            Vector3 target = _layout.StairExit != Vector3.zero
+                ? _layout.StairExit
+                : _layout.RampBottom + new Vector3(0f, 0.1f, -1.6f);
+
+            MovePlayer(player, target, 0f);
+
+            Plugin.Log.LogInfo(
+                $"[Souterrain] Descente par la trappe vers ({target.x:0.0}, " +
+                $"{target.y:0.0}, {target.z:0.0}).");
+        }
+
+        /// <summary>
+        /// Remontée : E sur le palier du bas ramène le joueur sur le plancher
+        /// du magasin, juste au-dessus de la trappe.
+        /// </summary>
+        private void AscendPlayer(FirstPersonController player)
+        {
+            if (_layout == null || player == null)
+                return;
+
+            Vector3 target = _layout.Hatch + Vector3.up * 0.45f;
+            MovePlayer(player, target, 0f);
+
+            Plugin.Log.LogInfo("[Souterrain] Remontée par la trappe.");
+        }
+
+        private static void MovePlayer(
+            FirstPersonController player, Vector3 target, float yaw)
+        {
+            FirstPersonTransform transformComponent = player.GetComponent<FirstPersonTransform>();
+            if (transformComponent != null)
+            {
+                transformComponent.coroutineActivator(target, yaw);
+            }
+            else
+            {
+                player.transform.position = target;
+            }
         }
 
         private CannabisPlot FindClosestPlot(FirstPersonController player)
@@ -1114,6 +1289,49 @@ namespace ItemAdder.Underground
                 UndergroundNetwork.SendAction(action, plot.Index);
         }
 
+        private void RequestSell()
+        {
+            if (IsServer)
+                SellStock();
+            else
+                UndergroundNetwork.SendAction(UndergroundNetwork.ActionSell, -1);
+        }
+
+        /// <summary>
+        /// Vend toute la récolte en réserve au contact du marché noir : plus de
+        /// rayon dans le magasin, donc plus de clients qui se servent tout seuls
+        /// sur une étagère. Le paiement est immédiat, à prix fixe.
+        /// </summary>
+        internal void SellStock(NetworkConnectionToClient requester = null)
+        {
+            if (!IsServer)
+                return;
+
+            int units = _stock[0] + _stock[1];
+            if (units <= 0)
+            {
+                Notify("Rien à vendre : récolte d'abord sur les parcelles.", requester);
+                return;
+            }
+
+            float total = _stock[0] * UndergroundCatalog.ClassicBasePrice +
+                          _stock[1] * UndergroundCatalog.PremiumBasePrice;
+
+            GameData data = GameData.Instance;
+            if (data == null)
+                return;
+
+            data.CmdAlterFunds(total);
+            ClearStock();
+
+            Notify($"{units} unités vendues au contact : +{total:0} $.", requester);
+            Plugin.Log.LogInfo(
+                $"[Souterrain] Récolte vendue au contact : {units} unités, {total:0} $.");
+            MarkDirty();
+            SendState();
+            SaveState();
+        }
+
         private void RequestDoorToggle()
         {
             if (NetworkServer.active)
@@ -1130,6 +1348,13 @@ namespace ItemAdder.Underground
             if (action == UndergroundNetwork.ActionToggleDoor)
             {
                 SetDoorOpen(!_doorOpen);
+                return;
+            }
+
+            if (action == UndergroundNetwork.ActionSell)
+            {
+                SellStock(sender);
+                SendStateTo(sender);
                 return;
             }
 
@@ -1190,7 +1415,7 @@ namespace ItemAdder.Underground
                     int amount = plot.ProductId == UndergroundCatalog.PremiumProductId ? 6 : 8;
                     if (!AddHarvest(plot.ProductId, amount))
                     {
-                        Notify("Le rayon à herbes est plein. Vends la récolte avant de récolter.", requester);
+                        Notify($"Stock plein ({StockCapacity} unités). Vends la récolte au contact.", requester);
                         return;
                     }
 
@@ -1199,7 +1424,7 @@ namespace ItemAdder.Underground
                     plot.Watered = false;
                     plot.Covered = false;
                     plot.RefreshVisual();
-                    Notify($"Récolte : {amount} unités ajoutées au rayon à herbes de l'étage.", requester);
+                    Notify($"Récolte : {amount} unités rangées dans la réserve. Vends-les au contact.", requester);
                     MarkDirty();
                     break;
                 }
@@ -1232,7 +1457,6 @@ namespace ItemAdder.Underground
                     SetPoliceDestination(_patrolPoints[0]);
             }
 
-            RefreshProducts();
             MarkDirty();
             SendState();
         }
@@ -1484,7 +1708,7 @@ namespace ItemAdder.Underground
                 plot.RefreshVisual();
             }
 
-            ClearShelf();
+            ClearStock();
             string message = $"Raid de police : amende de {fine:0} $ et récolte confisquée.";
             Notify(message);
             SendAlert(message);
@@ -1495,7 +1719,7 @@ namespace ItemAdder.Underground
 
         private bool HasHerbStock()
         {
-            return GetShelfQuantity(0) > 0 || GetShelfQuantity(1) > 0;
+            return _stock[0] > 0 || _stock[1] > 0;
         }
 
         private bool AnyUncoveredPlant()
@@ -1541,7 +1765,18 @@ namespace ItemAdder.Underground
             if (controller == null)
                 return;
 
-            if (controller.transform.position.y > _layout.FloorY - 3.5f)
+            Vector3 position = controller.transform.position;
+
+            // Tombé sous la dalle du sous-sol.
+            bool farBelow = position.y <= _layout.FloorY - 3.5f;
+
+            // Coincé *entre* le plancher du magasin et la salle : sous le
+            // niveau du sol, mais hors de l'emprise du sous-sol (trappe posée
+            // trop loin du magasin, rampe ensevelie, mur traversé).
+            bool stuckOutsideRoom =
+                position.y < -1.2f && !IsInBasement(position);
+
+            if (!farBelow && !stuckOutsideRoom)
                 return;
 
             Vector3 target = _layout.Hatch + Vector3.up * 0.35f;
@@ -1553,7 +1788,8 @@ namespace ItemAdder.Underground
                 controller.transform.position = target;
 
             Plugin.Log.LogWarning(
-                "[Souterrain] Joueur tombé sous le décor : remonté près de la trappe.");
+                $"[Souterrain] Joueur coincé sous le décor en ({position.x:0.0}, {position.y:0.0}, " +
+                $"{position.z:0.0}) : remonté près de la trappe.");
         }
 
         /// <summary>
@@ -1564,7 +1800,7 @@ namespace ItemAdder.Underground
         /// </summary>
         private void TickLeftoverCleanup()
         {
-            if (!IsServer || _shelf == null || _layout == null)
+            if (!IsServer || _layout == null)
                 return;
             if (Time.time < _nextLeftoverCheck)
                 return;
@@ -1573,157 +1809,111 @@ namespace ItemAdder.Underground
 
             GameData data = GameData.Instance;
             NetworkSpawner spawner = data != null ? data.GetComponent<NetworkSpawner>() : null;
-            if (spawner == null || spawner.levelPropsOBJ == null)
+            if (spawner == null)
                 return;
 
             int classicId = UndergroundCatalog.ClassicProductId;
             int premiumId = UndergroundCatalog.PremiumProductId;
-            Transform root = spawner.levelPropsOBJ.transform;
-            Transform current = _shelf.transform;
 
-            for (int i = 0; i < root.childCount; i++)
+            // L'ancien rayon pouvait être rangé sous levelPropsOBJ (groupes de
+            // meubles) ou sous shelvesOBJ (liste officielle des rayons) : on
+            // balaie les deux, sur deux niveaux.
+            if (spawner.levelPropsOBJ != null)
+                PurgeLeftoverShelves(spawner.levelPropsOBJ.transform, classicId, premiumId);
+            if (NPC_Manager.Instance != null && NPC_Manager.Instance.shelvesOBJ != null)
+                PurgeLeftoverShelves(NPC_Manager.Instance.shelvesOBJ.transform, classicId, premiumId);
+        }
+
+        private void PurgeLeftoverShelves(Transform root, int classicId, int premiumId)
+        {
+            for (int i = root.childCount - 1; i >= 0; i--)
             {
                 Transform group = root.GetChild(i);
                 if (group == null)
                     continue;
 
+                if (IsLeftoverHerbShelf(group, classicId, premiumId))
+                {
+                    RemoveLeftoverShelf(group, classicId, premiumId);
+                    continue;
+                }
+
                 for (int j = group.childCount - 1; j >= 0; j--)
                 {
                     Transform child = group.GetChild(j);
-                    if (child == null || child == current)
-                        continue;
-
-                    if (!child.name.StartsWith("Underground_HerbShelf") &&
-                        !ContainsUndergroundProduct(child, classicId, premiumId))
-                        continue;
-
-                    Plugin.Log.LogInfo(
-                        "[Souterrain] Doublon d'étagère à herbes retiré " +
-                        $"({child.position}).");
-
-                    NetworkIdentity identity = child.GetComponent<NetworkIdentity>();
-                    if (identity != null && identity.netId != 0)
-                        NetworkServer.Destroy(child.gameObject);
-                    else
-                        Object.Destroy(child.gameObject);
+                    if (child != null && IsLeftoverHerbShelf(child, classicId, premiumId))
+                        RemoveLeftoverShelf(child, classicId, premiumId);
                 }
             }
         }
 
-        private void RefreshProducts()
+        private static bool IsLeftoverHerbShelf(
+            Transform candidate, int classicId, int premiumId)
         {
-            if (Time.time < _nextProductRefresh)
-                return;
+            if (candidate.name.StartsWith("Underground_HerbShelf"))
+                return true;
 
-            _nextProductRefresh = Time.time + 0.75f;
-            UndergroundCatalog.RefreshAvailability();
+            return ContainsUndergroundProduct(candidate, classicId, premiumId);
+        }
+
+        private void RemoveLeftoverShelf(Transform shelf, int classicId, int premiumId)
+        {
+            // La récolte de l'ancien rayon est reprise dans la réserve du
+            // contact avant de retirer l'étagère.
+            SalvageLeftoverStock(shelf, classicId, premiumId);
+
+            Plugin.Log.LogInfo(
+                $"[Souterrain] Ancien rayon à herbes retiré ({shelf.position}).");
+
+            NetworkIdentity identity = shelf.GetComponent<NetworkIdentity>();
+            if (identity != null && identity.netId != 0)
+                NetworkServer.Destroy(shelf.gameObject);
+            else
+                Object.Destroy(shelf.gameObject);
         }
 
         /// <summary>
-        /// Quand un rayon se vide en cours de journée, les clients déjà partis
-        /// avec l'herbe dans leur liste continueraient à la chercher, puis
-        /// diraient qu'elle n'est pas là. On la retire de leur liste : seuls les
-        /// clients arrivés après un réassort la demandent.
+        /// Transfère le contenu d'une ancienne étagère à herbes dans la
+        /// réserve du contact, pour ne pas perdre la récolte en cours.
         /// </summary>
-        private void PurgeUnavailableDemand()
+        private void SalvageLeftoverStock(Transform shelf, int classicId, int premiumId)
         {
-            if (!IsServer || Time.time < _nextDemandPurge)
+            if (shelf == null)
                 return;
 
-            _nextDemandPurge = Time.time + 2f;
-
-            int classicId = UndergroundCatalog.ClassicProductId;
-            int premiumId = UndergroundCatalog.PremiumProductId;
-            bool classicMissing = classicId >= 0 && !HasClassicStock;
-            bool premiumMissing = premiumId >= 0 && !HasPremiumStock;
-            if (!classicMissing && !premiumMissing)
+            Data_Container container = shelf.GetComponent<Data_Container>();
+            if (container == null || container.productInfoArray == null)
                 return;
 
-            NPC_Info[] customers = Object.FindObjectsByType<NPC_Info>(FindObjectsSortMode.None);
-            for (int i = 0; i < customers.Length; i++)
+            for (int i = 0; i + 1 < container.productInfoArray.Length; i += 2)
             {
-                NPC_Info customer = customers[i];
-                if (customer == null || customer.productsIDToBuy == null ||
-                    customer.productsIDToBuy.Count == 0)
+                int id = container.productInfoArray[i];
+                int quantity = container.productInfoArray[i + 1];
+                if (quantity <= 0)
                     continue;
 
-                List<int> wanted = customer.productsIDToBuy;
-                bool changed = false;
-                for (int j = wanted.Count - 1; j >= 0; j--)
-                {
-                    int id = wanted[j];
-                    if ((classicMissing && id == classicId) ||
-                        (premiumMissing && id == premiumId))
-                    {
-                        wanted.RemoveAt(j);
-                        changed = true;
-                    }
-                }
-
-                if (changed && wanted.Count == 0)
-                    AddFallbackDemand(wanted, classicId, premiumId);
+                if (id == classicId)
+                    AddHarvest(classicId, quantity);
+                else if (id == premiumId)
+                    AddHarvest(premiumId, quantity);
             }
-        }
-
-        /// <summary>
-        /// Une liste de courses vide ferait planter la machine à états du
-        /// client : on y remet un produit encore présent en rayon.
-        /// </summary>
-        private static void AddFallbackDemand(List<int> wanted, int classicId, int premiumId)
-        {
-            ProductListing listing = ProductListing.Instance;
-            if (listing == null || listing.availableProducts == null ||
-                listing.availableProducts.Count == 0)
-                return;
-
-            int attempts = Mathf.Min(listing.availableProducts.Count, 16);
-            for (int i = 0; i < attempts; i++)
-            {
-                int candidate = listing.availableProducts[
-                    UnityEngine.Random.Range(0, listing.availableProducts.Count)];
-                if (candidate < 0 || candidate == classicId || candidate == premiumId)
-                    continue;
-
-                wanted.Add(candidate);
-                return;
-            }
-        }
-
-        private int GetShelfQuantity(int row)
-        {
-            if (_shelf == null || _shelf.productInfoArray == null)
-                return 0;
-
-            int index = row * 2 + 1;
-            return index < _shelf.productInfoArray.Length
-                ? Mathf.Max(0, _shelf.productInfoArray[index])
-                : 0;
         }
 
         private bool AddHarvest(int productId, int amount)
         {
-            if (_shelf == null)
-                return false;
-
             int row = productId == UndergroundCatalog.PremiumProductId ? 1 : 0;
-            int current = GetShelfQuantity(row);
-            int next = Mathf.Clamp(current + amount, 0, 24);
-            if (next == current)
+            int next = Mathf.Clamp(_stock[row] + amount, 0, StockCapacity);
+            if (next == _stock[row])
                 return false;
 
-            _shelf.DebugAdd(row * 2, productId, next);
-            RefreshProducts();
+            _stock[row] = next;
             return true;
         }
 
-        private void ClearShelf()
+        private void ClearStock()
         {
-            if (_shelf == null)
-                return;
-
-            _shelf.CmdContainerClear(0);
-            _shelf.CmdContainerClear(2);
-            RefreshProducts();
+            _stock[0] = 0;
+            _stock[1] = 0;
         }
 
         private void TickSave()
@@ -1848,7 +2038,9 @@ namespace ItemAdder.Underground
                 PlantedAt = new float[count],
                 Watered = new bool[count],
                 Covered = new bool[count],
-                PoliceNetId = _policeNetId
+                PoliceNetId = _policeNetId,
+                ClassicStock = _stock[0],
+                PremiumStock = _stock[1]
             };
 
             for (int i = 0; i < count; i++)
@@ -1912,7 +2104,9 @@ namespace ItemAdder.Underground
                 _policeVisualAttached = false;
             }
             AttachPoliceVisual(_policeNetId);
-            RefreshProducts();
+
+            _stock[0] = Mathf.Clamp(message.ClassicStock, 0, StockCapacity);
+            _stock[1] = Mathf.Clamp(message.PremiumStock, 0, StockCapacity);
 
             if (!NetworkServer.active && !wasReady)
             {
@@ -1955,8 +2149,9 @@ namespace ItemAdder.Underground
             try
             {
                 StringBuilder builder = new StringBuilder();
-                builder.AppendLine("version=1");
+                builder.AppendLine("version=2");
                 builder.AppendLine("door=" + (_doorOpen ? "1" : "0"));
+                builder.AppendLine("stock=" + _stock[0] + "|" + _stock[1]);
                 for (int i = 0; i < _plots.Length; i++)
                 {
                     CannabisPlot plot = _plots[i];
@@ -1999,6 +2194,17 @@ namespace ItemAdder.Underground
                     {
                         doorOpen = line.EndsWith("1");
                     }
+                    else if (line.StartsWith("stock="))
+                    {
+                        string[] stockValues = line.Substring(6).Split('|');
+                        if (stockValues.Length >= 2 &&
+                            int.TryParse(stockValues[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int classic) &&
+                            int.TryParse(stockValues[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int premium))
+                        {
+                            _stock[0] = Mathf.Clamp(classic, 0, StockCapacity);
+                            _stock[1] = Mathf.Clamp(premium, 0, StockCapacity);
+                        }
+                    }
                     else if (line.StartsWith("plot=") && plotIndex < _plots.Length)
                     {
                         string[] values = line.Substring(5).Split('|');
@@ -2019,8 +2225,9 @@ namespace ItemAdder.Underground
                 _doorOpen = doorOpen;
                 if (_door != null)
                     _door.SetOpen(doorOpen);
-                RefreshProducts();
-                Plugin.Log.LogInfo($"[Souterrain] État chargé depuis {Path.GetFileName(path)}.");
+                Plugin.Log.LogInfo(
+                    $"[Souterrain] État chargé depuis {Path.GetFileName(path)} " +
+                    $"({_stock[0]} classique, {_stock[1]} premium en réserve).");
             }
             catch (Exception exception)
             {
