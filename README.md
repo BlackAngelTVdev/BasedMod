@@ -270,6 +270,12 @@ ActiverSousSol = true
 AmendeRaid = 5000
 DureePousseHeures = 8
 ChanceRaidParInspection = 0.35
+
+[Discord]
+ActiverPresence = true
+IdentifiantApplication = 1564011498009923655
+TexteDetails = Mod ItemAdder v1.5.3
+TexteEtat = Gère son supermarché
 ```
 
 | Clé | Section | Défaut | Effet |
@@ -281,6 +287,10 @@ ChanceRaidParInspection = 0.35
 | `AmendeRaid` | `Souterrain` | `5000` | Montant retiré des fonds lors d'un raid réussi |
 | `DureePousseHeures` | `Souterrain` | `8` | Heures de jeu nécessaires pour qu'une parcelle arrosée arrive à maturité |
 | `ChanceRaidParInspection` | `Souterrain` | `0.35` | Probabilité qu'une inspection se transforme en descente |
+| `ActiverPresence` | `Discord` | `true` | Publie le statut « Joue à … » dans le client Discord |
+| `IdentifiantApplication` | `Discord` | `1564011498009923655` | Application Discord du mod : son nom devient le texte affiché après « Joue à » (vide = celle du mod) |
+| `TexteDetails` | `Discord` | `Mod ItemAdder v1.5.3` | Première ligne du statut |
+| `TexteEtat` | `Discord` | `Gère son supermarché` | Seconde ligne du statut |
 | `PauseAvantLog` | `Placement` | `true` | **Temporaire (mise au point)** : au F10 du mode placement, fige le jeu pour vérifier l'emplacement ; un second F10 écrit les coordonnées dans le log, F9 annule et relance le temps |
 
 > ⚠️ Le mod ajoute des produits et un palier à la fin des tableaux du jeu. **Tous les joueurs doivent avoir le mod** (et la même version) pour que le multijoueur reste synchronisé. Désactiver `ActiverRayonTabac` ou `ActiverSousSol` après avoir utilisé ces contenus dans une sauvegarde peut la rendre illisible : garde les options actives pour les parties concernées.
@@ -386,6 +396,23 @@ En solo ou en tant qu'hôte :
 - **F6** : fixe les fonds à **2 000 000 000 $** (argent illimité pour acheter les extensions et casser les murs du magasin).
 
 En multijoueur client, les raccourcis sont ignorés : les points et les fonds doivent être modifiés par l'hôte.
+
+### Statut Discord
+Le mod publie ton activité dans le client Discord, comme n'importe quel jeu : **« Joue à Supermarket Together Moded »**, puis deux lignes de détail. Aucune DLL supplémentaire — le mod parle directement le protocole IPC de Discord sur son tube nommé, en tâche de fond.
+
+**Rien à configurer** : l'identifiant de l'application Discord du mod est écrit dans le code (`Plugin.DiscordApplicationId`), donc **tous les joueurs** qui installent le mod affichent « Joue à Supermarket Together Moded », sans créer de compte développeur ni copier quoi que ce soit. Le texte après « Joue à » est le nom de cette application Discord ; il est commun à tous ceux qui utilisent le mod.
+
+| Élément | Valeur |
+| :--- | :--- |
+| Nom affiché | nom de l'application Discord du mod (`Supermarket Together Moded`) |
+| Détails | `TexteDetails` (défaut `Mod ItemAdder v1.5.3`) |
+| État | `TexteEtat` (défaut `Gère son supermarché`) |
+| Temps écoulé | démarre au chargement du mod |
+| Bouton | **Télécharger le mod** → <https://github.com/BlackAngelTVdev/BasedMod/releases> |
+
+Rien n'est demandé au joueur et le launcher n'a aucun champ à remplir. Pour changer le nom affiché, il faut modifier le `.cfg` : `[Discord]` → `IdentifiantApplication` (Application ID d'une application créée sur <https://discord.com/developers/applications>), une valeur vide revenant à l'application du mod. `ActiverPresence = false` coupe complètement le statut.
+
+Le statut est **purement local** : chaque joueur affiche le sien, rien n'est envoyé dans le réseau du jeu et aucun réglage de partie n'en dépend. Si Discord démarre après le jeu, le mod retente toutes les 20 s ; s'il est fermé, le statut disparaît et aucun redémarrage n'est nécessaire. Un identifiant refusé par Discord (`Invalid Client ID`) est signalé une seule fois dans le log, sans boucle de tentatives.
 
 ### Placer la trappe (F9 / F10)
 Pour choisir l'emplacement exact de la trappe au lieu de le deviner :

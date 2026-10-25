@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using ItemAdder.Discord;
 using ItemAdder.UI;
 using ItemAdder.Underground;
 using Mirror;
@@ -17,6 +18,13 @@ namespace ItemAdder
         public const string PluginName = "ItemAdder";
         public const string PluginVersion = "1.5.3";
 
+        /// <summary>
+        /// Application Discord du mod, valable pour tous les joueurs : son nom
+        /// est le texte que Discord affiche après « Joue à ». Surchargeable
+        /// dans la configuration pour utiliser sa propre application.
+        /// </summary>
+        public const string DiscordApplicationId = "1564011498009923655";
+
         internal static ManualLogSource Log;
         internal static ConfigEntry<float> FundsMultiplier;
         internal static ConfigEntry<bool> EnableTobacco;
@@ -25,11 +33,16 @@ namespace ItemAdder
         internal static ConfigEntry<float> UndergroundRaidFine;
         internal static ConfigEntry<float> UndergroundGrowHours;
         internal static ConfigEntry<float> UndergroundRaidChance;
+        internal static ConfigEntry<bool> EnableDiscordPresence;
+        internal static ConfigEntry<string> DiscordAppId;
+        internal static ConfigEntry<string> DiscordDetails;
+        internal static ConfigEntry<string> DiscordState;
 
         // TEMPORAIRE (mise au point du placement) : à retirer avec le mode pause.
         internal static ConfigEntry<bool> PlacementPauseBeforeLog;
 
         private Harmony _harmony;
+        private DiscordRichPresence _presence;
 
         private void Awake()
         {
@@ -77,6 +90,34 @@ namespace ItemAdder
                 0.35f,
                 "Probabilité qu'une inspection de police déclenche un raid si la trappe est ouverte et qu'un plant est visible.");
 
+            EnableDiscordPresence = Config.Bind(
+                "Discord",
+                "ActiverPresence",
+                true,
+                "Affiche sur Discord que le jeu tourne avec le mod (statut « Joue à … »). " +
+                "Le texte du statut vient du nom de l'application Discord renseignée dans IdentifiantApplication.");
+
+            DiscordAppId = Config.Bind(
+                "Discord",
+                "IdentifiantApplication",
+                DiscordApplicationId,
+                "Identifiant (Application ID) de l'application Discord à afficher. Son nom est ce que " +
+                "Discord écrit après « Joue à ». Par défaut celui du mod, donc rien à configurer ; " +
+                "vide = identifiant du mod. Mets le tien (https://discord.com/developers/applications) " +
+                "pour afficher ton propre nom.");
+
+            DiscordDetails = Config.Bind(
+                "Discord",
+                "TexteDetails",
+                "Mod ItemAdder v" + PluginVersion,
+                "Première ligne du statut Discord (2 à 128 caractères).");
+
+            DiscordState = Config.Bind(
+                "Discord",
+                "TexteEtat",
+                "By BlackAngelTVdev",
+                "Seconde ligne du statut Discord (2 à 128 caractères).");
+
             PlacementPauseBeforeLog = Config.Bind(
                 "Placement",
                 "PauseAvantLog",
@@ -108,7 +149,65 @@ namespace ItemAdder
             Object.DontDestroyOnLoad(escapeMenu);
             escapeMenu.AddComponent<EscapeMenuSaveButton>();
 
+            StartDiscordPresence();
+
             Log.LogInfo($"{PluginName} v{PluginVersion} chargé.");
+        }
+
+        /// <summary>
+        /// Statut Discord : purement local, chaque joueur affiche le sien.
+        /// Sans identifiant d'application valide, Discord n'a aucun nom à afficher,
+        /// donc on se contente d'expliquer une fois ce qu'il manque.
+        /// </summary>
+        private void StartDiscordPresence()
+        {
+            if (!EnableDiscordPresence.Value)
+            {
+                Log.LogInfo("[Discord] Statut désactivé (ActiverPresence = false).");
+                return;
+            }
+
+            string appId = (DiscordAppId.Value ?? string.Empty).Trim();
+
+            // Champ vidé à la main : on revient à l'application du mod plutôt que
+            // de priver le joueur du statut sans qu'il ait rien demandé.
+            if (appId.Length == 0)
+            {
+                appId = DiscordApplicationId;
+            }
+
+            if (!IsDiscordAppId(appId))
+            {
+                Log.LogWarning(
+                    "[Discord] Identifiant d'application invalide (" + appId + ") : " +
+                    "attendu un nombre de 17 à 20 chiffres.");
+                return;
+            }
+
+            _presence = new DiscordRichPresence(
+                appId,
+                DiscordDetails.Value,
+                DiscordState.Value,
+                message => Log.LogInfo(message));
+            _presence.Start();
+        }
+
+        private static bool IsDiscordAppId(string value)
+        {
+            if (value.Length < 17 || value.Length > 20)
+            {
+                return false;
+            }
+
+            foreach (char character in value)
+            {
+                if (character < '0' || character > '9')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void Update()
@@ -162,6 +261,8 @@ namespace ItemAdder
 
         private void OnDestroy()
         {
+            _presence?.Dispose();
+            _presence = null;
             _harmony?.UnpatchSelf();
         }
     }
